@@ -1,0 +1,72 @@
+from django.contrib.auth.backends import ModelBackend
+from django.contrib.auth import get_user_model
+from django.db import connection
+
+User = get_user_model()
+
+
+class CustomAuthBackend(ModelBackend):
+    """
+    Backend que autentica usando el modelo SimpleUser
+    """
+    
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        print("=" * 80)
+        print("🔐 INICIO AUTENTICACIÓN")
+        print(f"Username (correo): {username}")
+        
+        if username is None or password is None:
+            print("❌ Username o password es None")
+            return None
+        
+        try:
+            # Buscar en la tabla sigelin_simpleuser
+            with connection.cursor() as cur:
+                print("\n📧 Buscando usuario en sigelin_simpleuser...")
+                cur.execute("""
+                    SELECT id, nombre, apellido, email, rol, activo, password, username
+                    FROM sigelin_simpleuser
+                    WHERE email = %s AND activo = true
+                """, [username])
+                
+                row = cur.fetchone()
+                
+                if not row:
+                    print("❌ Usuario no encontrado")
+                    return None
+                
+                user_id, nombre, apellido, email, rol, activo, password_hash, django_username = row
+                
+                print(f"✅ Usuario encontrado:")
+                print(f"   ID: {user_id}")
+                print(f"   Nombre: {nombre} {apellido}")
+                print(f"   Email: {email}")
+                print(f"   Username: {django_username}")
+                print(f"   Rol: {rol}")
+                
+                # Buscar el usuario con el ORM
+                user = User.objects.get(id=user_id)
+                
+                # Verificar contraseña usando el método de Django
+                print("\n🔑 Verificando contraseña...")
+                if user.check_password(password):
+                    print("✅ Contraseña válida")
+                    print("=" * 80)
+                    return user
+                else:
+                    print("❌ Contraseña incorrecta")
+                    print("=" * 80)
+                    return None
+                
+        except Exception as e:
+            print(f"❌ ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            print("=" * 80)
+            return None
+    
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None

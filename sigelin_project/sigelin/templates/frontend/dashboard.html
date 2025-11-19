@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard - SIGELIN</title>
+  <style>
+    :root{--brand:#D32F2F;--bg:#f5f7fb;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Roboto',Arial,sans-serif;background:var(--bg);color:#0b1220;display:flex;min-height:100vh}
+    
+    /* Sidebar */
+    aside{width:220px;background:var(--brand);color:#fff;padding:20px;height:100vh;position:fixed;left:0;top:0}
+    aside h2{margin:0 0 20px;font-size:20px}
+    aside a{display:block;color:#fff;text-decoration:none;margin:10px 0;padding:10px;border-radius:6px;transition:background 0.3s}
+    aside a:hover{background:rgba(255,255,255,0.1)}
+    aside a.active{background:rgba(255,255,255,0.2)}
+    aside button{margin-top:20px;background:#fff;color:var(--brand);border:none;padding:10px;width:100%;border-radius:8px;cursor:pointer;font-weight:600}
+    aside button:hover{background:#f5f5f5}
+    
+    /* Main content */
+    main{flex:1;margin-left:220px;padding:20px;width:calc(100% - 220px)}
+    
+    .header{background:#fff;padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+    .header h1{margin:0 0 8px;color:var(--brand)}
+    .header p{margin:0;color:var(--muted);font-size:14px}
+    
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin:20px 0}
+    .stat-card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 4px 12px rgba(9,30,66,0.08);text-align:center;transition:transform 0.2s}
+    .stat-card:hover{transform:translateY(-4px);box-shadow:0 8px 20px rgba(9,30,66,0.12)}
+    .stat-card h3{margin:0;font-size:36px;color:var(--brand);font-weight:700}
+    .stat-card p{margin:12px 0 0;color:var(--muted);font-size:14px;font-weight:500}
+    
+    .card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.05);margin-bottom:20px}
+    .card h3{margin:0 0 16px;color:#0b1220;font-size:18px}
+    
+    .actions{display:flex;gap:12px;flex-wrap:wrap}
+    .btn{background:var(--brand);color:#fff;border:none;padding:12px 20px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-block;font-weight:600;transition:background 0.3s}
+    .btn:hover{background:#b71c1c}
+    
+    .user-badge{background:rgba(255,255,255,0.1);padding:12px;border-radius:8px;margin-bottom:20px}
+    .user-badge .name{font-weight:700;font-size:16px;margin-bottom:4px}
+    .user-badge .role{font-size:13px;opacity:0.8}
+    
+    @media(max-width:768px){
+      aside{width:100%;height:auto;position:relative}
+      main{margin-left:0;width:100%}
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <h2>SIGELIN</h2>
+    
+    <div class="user-badge">
+      <div class="name" id="sidebarName">Usuario</div>
+      <div class="role" id="sidebarRole">Rol</div>
+    </div>
+    
+    <a href="dashboard.html" class="active">📊 Panel</a>
+    <a href="equipos.html">🖥️ Equipos</a>
+    <a href="reparaciones.html">🔧 Reparaciones</a>
+    <a href="inventario.html">📦 Inventario</a>
+    <a href="reportes.html">📄 Reportes</a>
+    
+    <button onclick="logout()">Cerrar sesión</button>
+  </aside>
+
+  <main>
+    <div class="header">
+      <h1>Panel de Control</h1>
+      <p id="welcomeMsg">Bienvenido al sistema</p>
+    </div>
+
+    <div class="grid">
+      <div class="stat-card">
+        <h3 id="equipos-count">-</h3>
+        <p>📱 Equipos Totales</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="reparaciones-count">-</h3>
+        <p>🔧 Reparaciones Pendientes</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="repuestos-count">-</h3>
+        <p>⚠️ Repuestos Bajo Stock</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🚀 Acciones Rápidas</h3>
+      <div class="actions">
+        <a href="equipos.html" class="btn">Ver Equipos</a>
+        <a href="reparaciones.html" class="btn">Ver Reparaciones</a>
+        <a href="inventario.html" class="btn">Ver Inventario</a>
+        <a href="reportes.html" class="btn">Generar Reportes</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>ℹ️ Información del Sistema</h3>
+      <p>Sistema de Gestión de Equipos de Laboratorio - INACAP</p>
+      <p style="color:var(--muted);font-size:14px;margin-top:8px">
+        Versión 1.0 | Proyecto Integrado 2025
+      </p>
+    </div>
+  </main>
+
+<script>
+// Verificar autenticación
+const user = JSON.parse(localStorage.getItem('sigelin_user') || 'null');
+const token = localStorage.getItem('sigelin_token');
+
+if(!user || !token){
+  window.location.href = '/';
+}
+
+// Mostrar información del usuario
+const nombreCompleto = `${user.nombre || ''} ${user.apellido || ''}`.trim();
+document.getElementById('sidebarName').textContent = nombreCompleto || user.email || 'Usuario';
+document.getElementById('sidebarRole').textContent = user.rol || 'Sin rol';
+document.getElementById('welcomeMsg').textContent = `Bienvenido ${user.nombre || 'Usuario'}, tu rol es: ${user.rol || 'N/A'}`;
+
+// Cargar datos del dashboard
+async function cargarDatos(){
+  try{
+    const [equiposRes, reparacionesRes, repuestosRes] = await Promise.all([
+      fetch('/api/equipos/'),
+      fetch('/api/reparaciones/'),
+      fetch('/api/repuestos/')
+    ]);
+
+    const equipos = await equiposRes.json();
+    const reparaciones = await reparacionesRes.json();
+    const repuestos = await repuestosRes.json();
+
+    // Actualizar contadores
+    document.getElementById('equipos-count').textContent = equipos.equipos?.length || 0;
+    document.getElementById('reparaciones-count').textContent = reparaciones.reparaciones?.length || 0;
+    document.getElementById('repuestos-count').textContent = repuestos.repuestos?.length || 0;
+  }catch(e){
+    console.error('Error cargando datos:', e);
+    // Si falla, mostrar 0
+    document.getElementById('equipos-count').textContent = '0';
+    document.getElementById('reparaciones-count').textContent = '0';
+    document.getElementById('repuestos-count').textContent = '0';
+  }
+}
+
+function logout(){
+  localStorage.removeItem('sigelin_user');
+  localStorage.removeItem('sigelin_token');
+  window.location.href = '/';
+}
+
+// Cargar datos al iniciar
+cargarDatos();
+</script>
+</body>
+</html>
