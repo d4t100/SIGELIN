@@ -26,6 +26,16 @@
     footer{padding:18px;text-align:center;color:var(--muted);font-size:13px;background:#f8fafc}
     @media(max-width:900px){nav{display:none}}
   </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+  });
+</script>
 </head>
 <body>
   <header>
@@ -161,4 +171,5 @@ window.getUser = getUser;
 window.logout = logout;
 </script>
 </body>
+<script src="/static/frontend/auth.js"></script>
 </html>

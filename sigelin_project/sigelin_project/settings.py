@@ -15,19 +15,6 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'   # para collectstatic en prod
-
-# Si quieres incluir una carpeta solo si existe:
-STATICFILES_DIRS = []
-static_dir = BASE_DIR / 'static'
-if static_dir.exists():
-    STATICFILES_DIRS.append(static_dir)
-# si tu build SPA está aquí:
-frontend_static = BASE_DIR / 'static' / 'frontend'
-if frontend_static.exists():
-    STATICFILES_DIRS.append(frontend_static)
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -38,7 +25,7 @@ SECRET_KEY = 'django-insecure-ww8#$qhb9y=mw66qyg+$!(kf5%u6xn*ijpjw$4j%vt&tl(ra8%
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
@@ -58,11 +45,11 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -72,10 +59,14 @@ ROOT_URLCONF = 'sigelin_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [ BASE_DIR / 'templates', BASE_DIR / 'templates' / 'frontend' ],
+        'DIRS': [
+            BASE_DIR / 'sigelin' / 'templates',
+            BASE_DIR / 'sigelin' / 'templates' / 'frontend',
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+                'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -124,9 +115,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-cl'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Santiago'
 
 USE_I18N = True
 
@@ -137,30 +128,66 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'   # para collectstatic en prod
+
+# STATICFILES_DIRS - directorios adicionales donde Django busca archivos estáticos
+STATICFILES_DIRS = []
+
+# Agregar directorio static si existe
+static_dir = BASE_DIR / 'static'
+if static_dir.exists():
+    STATICFILES_DIRS.append(static_dir)
+
+# Agregar directorio de templates/frontend si existe
+frontend_templates = BASE_DIR / 'sigelin' / 'templates' / 'frontend'
+if frontend_templates.exists():
+    STATICFILES_DIRS.append(frontend_templates)
+
+# Si tu build SPA está aquí:
+frontend_static = BASE_DIR / 'static' / 'frontend'
+if frontend_static.exists() and frontend_static not in STATICFILES_DIRS:
+    STATICFILES_DIRS.append(frontend_static)
+
+# Configuración de WhiteNoise para servir archivos estáticos
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files (Uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+# Authentication
+AUTH_USER_MODEL = 'sigelin.SimpleUser'
+
 AUTHENTICATION_BACKENDS = [
-    'sigelin.backend.PostgresCryptBackend',
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
+
+# REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+
+# CORS Configuration
+CORS_ALLOW_CREDENTIALS = True  # MUY IMPORTANTE para sesiones
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]
-
-CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -174,8 +201,46 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-AUTH_USER_MODEL = 'sigelin.SimpleUser'
 
-AUTHENTICATION_BACKENDS = [
-    'django.contrib.auth.backends.ModelBackend',
+# Session Configuration
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False  # True solo en HTTPS/producción
+SESSION_COOKIE_AGE = 86400  # 24 horas (en segundos)
+SESSION_SAVE_EVERY_REQUEST = True  # Mantiene la sesión activa
+SESSION_COOKIE_NAME = 'sigelin_sessionid'  # Nombre personalizado
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Sesiones en BD
+
+
+# CSRF Configuration
+CSRF_COOKIE_HTTPONLY = False  # El frontend necesita leer el token
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = False  # True solo en HTTPS/producción
+CSRF_COOKIE_NAME = 'sigelin_csrftoken'  # Nombre personalizado
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
 ]
+
+
+# Logging (opcional pero útil para debug)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

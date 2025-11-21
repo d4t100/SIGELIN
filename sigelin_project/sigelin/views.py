@@ -1,87 +1,35 @@
 from django.shortcuts import render
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.shortcuts import render
-from django.contrib.auth import authenticate, login, get_user_model
+from django.contrib.auth import authenticate, login, logout, get_user_model
 import json
+import qrcode
+from io import BytesIO
 
+User = get_user_model()
 
-import json
+# ============================================================================
+# AUTENTICACIÓN
+# ============================================================================
 
-class LoginAPI(APIView):
-    authentication_classes = []
-    permission_classes = []
-
-    def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
-        user = authenticate(request, username=email, password=password)
-        if not user:
-            return Response({'detail':'Credenciales inválidas'}, status=401)
-        refresh = RefreshToken.for_user(user)  # esto falla si user no es un User de Django
-        # Si usas SimpleUser (no Django User), genera token manual:
-        payload = {
-            'user_id': str(user.id),
-            'email': user.email,
-            'rol': user.rol,
-        }
-        # mejor: crear tokens manuales
-        refresh = RefreshToken()
-        refresh['user_id'] = str(user.id)
-        refresh['email'] = user.email
-        refresh['rol'] = user.rol
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-        })
-
-# Create your views here.
-
-from django.http import HttpResponse
-from .qr import generar_qr_para_equipo
-from .models import Equipos
-
-def ver_qr_equipo(request, pk):
-    equipo = Equipos.objects.get(pk=pk)
-    qr_image = generar_qr_para_equipo(equipo)
-
-    # Si tienes el archivo guardado:
-    if hasattr(equipo, 'qr_image') and equipo.qr_image:
-        with open(equipo.qr_image.path, 'rb') as f:
-            return HttpResponse(f.read(), content_type='image/png')
-
-    # Si solo generas el QR temporalmente:
-    import qrcode
-    from io import BytesIO
-    img = qrcode.make(equipo.codigo_qr or str(equipo.id))
-    buffer = BytesIO()
-    img.save(buffer, format='PNG')
-    return HttpResponse(buffer.getvalue(), content_type='image/png')
-
-# Vista principal (index)
 def index(request):
+    """Renderiza la página de login"""
     return render(request, 'frontend/index.html')
 
-# API Views
-User = get_user_model()
 
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
-from django.contrib.auth import login, get_user_model
-from django.db import connection
-import json
-
-User = get_user_model()
+def dashboard(request):
+    """Renderiza el dashboard"""
+    return render(request, 'frontend/dashboard.html')
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def login_view(request):
+    """
+    Login de usuarios
+    Espera JSON con: correo y password
+    """
     try:
         data = json.loads(request.body)
         correo = data.get('correo', '').strip()
@@ -95,57 +43,36 @@ def login_view(request):
                 'message': 'Correo y contraseña son requeridos'
             }, status=400)
         
-        # Verificar credenciales directamente en PostgreSQL
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT id, nombre, apellido, correo, rol
-                FROM usuarios
-                WHERE correo = %s 
-                AND activo = true
-                AND password_hash = crypt(%s, password_hash)
-            """, [correo, password])
+        # Intentar autenticar
+        user = authenticate(request, username=correo, password=password)
+        
+        if user:
+            login(request, user)
+            print("✓ Login exitoso")
+            return JsonResponse({
+                'success': True,
+                'message': 'Login exitoso',
+                'user': {
+                    'id': str(user.id),
+                    'nombre': getattr(user, 'nombre', ''),
+                    'apellido': getattr(user, 'apellido', ''),
+                    'email': user.email,
+                    'correo': user.email,
+                    'rol': getattr(user, 'rol', '')
+                }
+            })
+        else:
+            print("✗ Credenciales inválidas")
+            return JsonResponse({
+                'success': False,
+                'message': 'Credenciales inválidas'
+            }, status=401)
             
-            result = cursor.fetchone()
-            
-            if result:
-                user_id, nombre, apellido, email, rol = result
-                
-                try:
-                    # Obtener el objeto user
-                    user = User.objects.raw(
-                        "SELECT * FROM usuarios WHERE id = %s",
-                        [user_id]
-                    )[0]
-                    
-                    # Iniciar sesión
-                    user.backend = 'django.contrib.auth.backends.ModelBackend'
-                    login(request, user)
-                    
-                    print("✓ Login exitoso")
-                    return JsonResponse({
-                        'success': True,
-                        'message': 'Login exitoso',
-                        'user': {
-                            'id': str(user_id),
-                            'nombre': nombre,
-                            'apellido': apellido,
-                            'email': email,
-                            'rol': rol
-                        }
-                    })
-                except (IndexError, Exception) as e:
-                    print(f"✗ Error al obtener usuario: {e}")
-                    return JsonResponse({
-                        'success': False,
-                        'message': 'Error al autenticar'
-                    }, status=500)
-            else:
-                print("✗ Credenciales inválidas")
-                return JsonResponse({
-                    'success': False,
-                    'message': 'Credenciales inválidas'
-                }, status=401)
-            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'message': 'JSON inválido'
+        }, status=400)
     except Exception as e:
         print(f"ERROR: {str(e)}")
         import traceback
@@ -155,22 +82,113 @@ def login_view(request):
             'message': 'Error del servidor'
         }, status=500)
 
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def logout_view(request):
+    """Cierra la sesión del usuario"""
+    logout(request)
+    return JsonResponse({
+        'success': True,
+        'message': 'Sesión cerrada'
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def auth_check(request):
+    """
+    Verifica si el usuario tiene una sesión válida
+    """
+    auth_header = request.headers.get('Authorization', '')
+    
+    if not auth_header or auth_header != 'Bearer session_active':
+        return JsonResponse({
+            'authenticated': False,
+            'message': 'No hay sesión válida'
+        }, status=401)
+    
+    if request.user and request.user.is_authenticated:
+        return JsonResponse({
+            'authenticated': True,
+            'user': {
+                'id': str(request.user.id),
+                'nombre': getattr(request.user, 'nombre', ''),
+                'apellido': getattr(request.user, 'apellido', ''),
+                'email': request.user.email,
+                'rol': getattr(request.user, 'rol', '')
+            }
+        })
+    
+    return JsonResponse({
+        'authenticated': False,
+        'message': 'Sesión expirada'
+    }, status=401)
+
+
+# ============================================================================
+# QR Y EQUIPOS
+# ============================================================================
+
+def ver_qr_equipo(request, pk):
+    """
+    Genera y devuelve un código QR para un equipo específico
+    """
+    try:
+        from sigelin.models import Equipos
+        
+        equipo = Equipos.objects.get(pk=pk)
+        
+        # Crear datos del QR
+        data = f"http://localhost:8000/equipos/{pk}/qr/"
+        
+        # Generar código QR
+        img = qrcode.make(data)
+        
+        # Convertir a bytes
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        return HttpResponse(buffer.getvalue(), content_type='image/png')
+        
+    except Exception as e:
+        print(f"Error generando QR: {e}")
+        return HttpResponse(f'Error: {str(e)}', status=500)
+
+
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
+
 @require_http_methods(["GET"])
 def listar_equipos(request):
-    # Por ahora devuelve datos de ejemplo
-    # Luego lo conectarás con tu modelo
-    equipos = []
-    return JsonResponse({'equipos': equipos})
+    """Lista todos los equipos"""
+    try:
+        from sigelin.models import Equipos
+        equipos = list(Equipos.objects.filter(activo=True).values())
+        return JsonResponse({'equipos': equipos})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 
 @require_http_methods(["GET"])
 def listar_reparaciones(request):
-    reparaciones = []
-    return JsonResponse({'reparaciones': reparaciones})
+    """Lista todas las reparaciones"""
+    try:
+        from sigelin.models import Reparaciones
+        reparaciones = list(Reparaciones.objects.values())
+        return JsonResponse({'reparaciones': reparaciones})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 
 @require_http_methods(["GET"])
 def listar_repuestos(request):
-    repuestos = []
-    return JsonResponse({'repuestos': repuestos})
-
-def dashboard(request):
-    return render(request, 'frontend/dashboard.html')
+    """Lista todos los repuestos"""
+    try:
+        from sigelin.models import Repuestos
+        repuestos = list(Repuestos.objects.filter(activo=True).values())
+        return JsonResponse({'repuestos': repuestos})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

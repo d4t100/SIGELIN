@@ -16,19 +16,30 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include, re_path
-from sigelin import views as sigelin_views
 from django.conf import settings
 from django.conf.urls.static import static
+from sigelin import views
 
 urlpatterns = [
-    path('equipos/<uuid:pk>/qr/', sigelin_views.ver_qr_equipo, name='ver_qr_equipo'),
+    # Admin
     path('admin/', admin.site.urls),
-    path('api/', include('sigelin.urls_api')),  # tus endpoints DRF
-    path('dashboard.html', sigelin_views.dashboard, name='dashboard'),
-    # cualquier otra ruta que no sea /api/ caera al index de la SPA:
-    re_path(r'^(?:.*)/?$', sigelin_views.index),
+    
+    # API
+    path('api/', include('sigelin.urls_api')),
+    
+    # QR
+    path('equipos/<uuid:pk>/qr/', views.ver_qr_equipo, name='ver_qr_equipo'),
+    
+    # Pages
+    path('dashboard.html', views.dashboard, name='dashboard'),
+    path('', views.index, name='index'),
+    
+    # Catch all para la SPA
+    re_path(r'^(?!api|admin|static).*$', views.index, name='spa_fallback'),
 ]
-# servir media en desarrollo
+
+# Servir archivos estáticos en desarrollo
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 

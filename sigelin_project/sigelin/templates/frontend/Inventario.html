@@ -14,6 +14,16 @@
     th { background: #D32F2F; color: white; }
     .alerta { color: red; font-weight: bold; }
   </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+});
+</script>
 </head>
 <body>
   <aside>
@@ -56,4 +66,5 @@
     cargarInventario();
   </script>
 </body>
+<script src="/static/frontend/auth.js"></script>
 </html>

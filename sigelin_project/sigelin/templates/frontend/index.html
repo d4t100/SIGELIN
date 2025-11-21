@@ -32,12 +32,15 @@
     .row{display:flex;gap:10px}
     .btn{display:inline-block;padding:12px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-weight:700;cursor:pointer;width:100%}
     .btn.ghost{background:#fff;color:var(--brand)}
+    .btn:disabled{opacity:0.6;cursor:not-allowed}
     .small{font-size:13px;color:#94a3b8;margin-top:8px}
 
     .demo-list{list-style:none;padding:0;margin:12px 0 0;color:#eaf3ff}
     .demo-list li{margin:8px 0;padding-left:18px;position:relative}
     .demo-list li:before{content:"•";position:absolute;left:0;top:0;color:var(--brand)}
-    .error{color:#b91c1c;font-weight:600;margin-top:8px}
+    .error{color:#b91c1c;font-weight:600;margin-top:8px;display:none}
+    .error.show{display:block}
+    .error.success{color:#16a34a}
 
     @media (max-width:920px){
       .wrap{grid-template-columns:1fr;padding:8px}
@@ -68,14 +71,14 @@
       <form id="loginForm" onsubmit="event.preventDefault(); doLogin()">
         <input id="email" type="email" placeholder="correo@inacap.cl" autocomplete="username" required>
         <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
-        <button class="btn" type="submit">Ingresar</button>
+        <button class="btn" type="submit" id="submitBtn">Ingresar</button>
       </form>
 
       <div style="display:flex;gap:10px;margin-top:12px">
-        <button class="btn ghost" onclick="fillDemo()">Credenciales demo</button>
+        <button class="btn ghost" onclick="fillDemo()" type="button">Credenciales demo</button>
       </div>
 
-      <div id="error" class="error" role="status" aria-live="polite" style="display:none"></div>
+      <div id="error" class="error" role="status" aria-live="polite"></div>
       <div style="text-align:center;margin-top:14px">
         <img src="inacap.jpg" alt="Inacap" style="width:110px;border-radius:10px;opacity:0.9">
       </div>
@@ -83,21 +86,17 @@
   </div>
 
 <script>
-/*
-  index.html -> Login
-  Requiere backend en: API_BASE + '/auth/login/'
-  Cambia API_BASE si tu servidor NO está en http://localhost:8000
-*/
 const API_BASE = 'http://localhost:8000/api';
 
-const USERS_DEMO = [
-  {email:'admin@sigelin.cl', pass:'1234'},
-  {email:'tecnico@sigelin.cl', pass:'1234'},
-  {email:'bodega@sigelin.cl', pass:'1234'},
-  {email:'coordinador@sigelin.cl', pass:'1234'},
-  {email:'jefe@sigelin.cl', pass:'1234'},
-  {email:'usuario@sigelin.cl', pass:'1234'}
-];
+// Si ya hay sesión, redirigir directamente al dashboard
+window.addEventListener('load', () => {
+  const user = localStorage.getItem('sigelin_user');
+  const token = localStorage.getItem('sigelin_token');
+  
+  if(user && token) {
+    window.location.href = '/dashboard.html';
+  }
+});
 
 function fillDemo(){
   document.getElementById('email').value = 'admin@sigelin.cl';
@@ -107,13 +106,23 @@ function fillDemo(){
 async function doLogin(){
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
-  const elErr = document.getElementById('error'); elErr.style.display='none'; elErr.textContent='';
+  const elErr = document.getElementById('error');
+  const submitBtn = document.getElementById('submitBtn');
+  
+  elErr.classList.remove('show', 'success');
+  elErr.textContent = '';
 
-  if(!email || !password){ elErr.style.display='block'; elErr.textContent='Complete ambos campos.'; return; }
+  if(!email || !password){ 
+    elErr.classList.add('show');
+    elErr.textContent = 'Complete ambos campos.'; 
+    return; 
+  }
 
   try{
-    document.querySelector('.btn').disabled = true;
-    elErr.style.display='block'; elErr.style.color='#0b1220'; elErr.textContent = 'Verificando...';
+    submitBtn.disabled = true;
+    elErr.classList.add('show');
+    elErr.classList.remove('success');
+    elErr.textContent = 'Verificando...';
 
     const res = await fetch(`${API_BASE}/auth/login/`, {
       method:'POST',
@@ -128,26 +137,24 @@ async function doLogin(){
 
     const data = await res.json();
     
-    // Verificar que el login fue exitoso
     if(!data.success){
       throw new Error(data.message || 'Error al iniciar sesión');
     }
 
-    // Guardar usuario en localStorage
     localStorage.setItem('sigelin_user', JSON.stringify(data.user));
-    // Como no usas JWT, puedes guardar un flag simple
     localStorage.setItem('sigelin_token', 'session_active');
 
-    elErr.style.color = 'green';
+    elErr.classList.add('success');
     elErr.textContent = 'Ingreso correcto. Redirigiendo...';
     
-    // Redirigir a dashboard
     setTimeout(()=> window.location.href = '/dashboard.html', 800);
     
   }catch(e){
-    elErr.style.display='block'; elErr.style.color='#b91c1c'; elErr.textContent = e.message;
+    elErr.classList.add('show');
+    elErr.classList.remove('success');
+    elErr.textContent = e.message;
   }finally{
-    document.querySelector('.btn').disabled = false;
+    submitBtn.disabled = false;
   }
 }
 </script>

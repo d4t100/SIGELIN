@@ -11,6 +11,16 @@
     main { flex: 1; padding: 20px; }
     button { background: #D32F2F; color: white; border: none; padding: 10px 20px; border-radius: 8px; margin: 10px; cursor: pointer; }
   </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+  });
+</script>python manage.py makemigrations
 </head>
 <body>
   <aside>
@@ -54,4 +64,5 @@
     }
   </script>
 </body>
+<script src="/static/frontend/auth.js"></script>
 </html>

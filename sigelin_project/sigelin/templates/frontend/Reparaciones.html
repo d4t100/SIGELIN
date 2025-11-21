@@ -14,6 +14,16 @@
     th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
     th { background: #D32F2F; color: white; }
   </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+  });
+</script>
 </head>
 <body>
   <aside>
@@ -55,4 +65,5 @@
     cargarReparaciones();
   </script>
 </body>
+<script src="/static/frontend/auth.js"></script>
 </html>

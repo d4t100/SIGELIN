@@ -18,6 +18,16 @@
     input, select { padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 10px; }
     button.registrar { background: #D32F2F; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; }
   </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+  });
+</script>
 </head>
 <body>
   <aside>
@@ -88,4 +98,5 @@
     cargarEquipos();
   </script>
 </body>
+<script src="/static/frontend/auth.js"></script>
 </html>
