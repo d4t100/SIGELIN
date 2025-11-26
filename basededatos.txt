@@ -1,0 +1,1026 @@
+-- ============================================
+-- SIGELIN - Sistema de Gestión de Laboratorios
+-- Base de Datos PostgreSQL
+-- Versión: 1.0
+-- ============================================
+
+-- Crear base de datos
+CREATE DATABASE sigelin_db
+    WITH 
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'es_CL.UTF-8'
+    LC_CTYPE = 'es_CL.UTF-8'
+    TEMPLATE = template0;
+
+\c sigelin_db;
+
+-- Extensiones necesarias
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ============================================
+-- TIPOS ENUMERADOS
+-- ============================================
+
+CREATE TYPE rol_usuario AS ENUM (
+    'administrador',
+    'coordinador',
+    'tecnico',
+    'bodega',
+    'jefe_area',
+    'usuario'
+);
+
+CREATE TYPE estado_equipo AS ENUM (
+    'operativo',
+    'mantenimiento',
+    'reparacion',
+    'baja'
+);
+
+CREATE TYPE tipo_repuesto AS ENUM (
+    'hardware',
+    'consumible',
+    'herramienta',
+    'accesorio',
+    'otro'
+);
+
+CREATE TYPE estado_reparacion AS ENUM (
+    'pendiente',
+    'en_proceso',
+    'completada',
+    'cancelada'
+);
+
+CREATE TYPE estado_compra AS ENUM (
+    'solicitada',
+    'aprobada',
+    'rechazada',
+    'recibida'
+);
+
+CREATE TYPE prioridad_incidencia AS ENUM (
+    'baja',
+    'media',
+    'alta',
+    'critica'
+);
+
+CREATE TYPE estado_incidencia AS ENUM (
+    'reportada',
+    'asignada',
+    'en_atencion',
+    'resuelta',
+    'cerrada'
+);
+
+CREATE TYPE tipo_reporte AS ENUM (
+    'inventario',
+    'reparaciones',
+    'incidencias',
+    'stock',
+    'general'
+);
+
+-- ============================================
+-- TABLA: usuarios
+-- ============================================
+
+CREATE TABLE usuarios (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100) NOT NULL,
+    correo VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    rol rol_usuario NOT NULL DEFAULT 'usuario',
+    telefono VARCHAR(20),
+    activo BOOLEAN DEFAULT true,
+    token_2fa VARCHAR(255),
+    ultimo_acceso TIMESTAMP,
+    intentos_fallidos INTEGER DEFAULT 0,
+    bloqueado_hasta TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para usuarios
+CREATE INDEX idx_usuarios_correo ON usuarios(correo);
+CREATE INDEX idx_usuarios_rol ON usuarios(rol);
+CREATE INDEX idx_usuarios_activo ON usuarios(activo);
+
+-- ============================================
+-- TABLA: ubicaciones
+-- ============================================
+
+CREATE TABLE ubicaciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre_sala VARCHAR(100) NOT NULL,
+    piso INTEGER NOT NULL,
+    edificio VARCHAR(50) NOT NULL,
+    capacidad INTEGER,
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(nombre_sala, edificio)
+);
+
+-- Índices para ubicaciones
+CREATE INDEX idx_ubicaciones_edificio ON ubicaciones(edificio);
+CREATE INDEX idx_ubicaciones_activo ON ubicaciones(activo);
+
+-- ============================================
+-- TABLA: equipos
+-- ============================================
+
+CREATE TABLE equipos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo_qr VARCHAR(100) NOT NULL UNIQUE,
+    nombre VARCHAR(150) NOT NULL,
+    marca VARCHAR(100) NOT NULL,
+    modelo VARCHAR(100) NOT NULL,
+    nro_serie VARCHAR(100) UNIQUE,
+    estado estado_equipo DEFAULT 'operativo',
+    fecha_adquisicion DATE,
+    valor_compra DECIMAL(12,2),
+    garantia_meses INTEGER,
+    proveedor VARCHAR(150),
+    observaciones TEXT,
+    especificaciones JSONB,
+    id_ubicacion UUID REFERENCES ubicaciones(id) ON DELETE SET NULL,
+    id_responsable UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para equipos
+CREATE INDEX idx_equipos_codigo_qr ON equipos(codigo_qr);
+CREATE INDEX idx_equipos_estado ON equipos(estado);
+CREATE INDEX idx_equipos_ubicacion ON equipos(id_ubicacion);
+CREATE INDEX idx_equipos_responsable ON equipos(id_responsable);
+CREATE INDEX idx_equipos_marca_modelo ON equipos(marca, modelo);
+
+-- ============================================
+-- TABLA: historial_ubicacion
+-- ============================================
+
+CREATE TABLE historial_ubicacion (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_equipo UUID NOT NULL REFERENCES equipos(id) ON DELETE CASCADE,
+    id_ubicacion_anterior UUID REFERENCES ubicaciones(id),
+    id_ubicacion_nueva UUID REFERENCES ubicaciones(id),
+    fecha_cambio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    motivo VARCHAR(255),
+    id_usuario UUID REFERENCES usuarios(id),
+    observaciones TEXT
+);
+
+-- Índices para historial_ubicacion
+CREATE INDEX idx_historial_ubicacion_equipo ON historial_ubicacion(id_equipo);
+CREATE INDEX idx_historial_ubicacion_fecha ON historial_ubicacion(fecha_cambio DESC);
+
+-- ============================================
+-- TABLA: repuestos
+-- ============================================
+
+CREATE TABLE repuestos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo VARCHAR(50) NOT NULL UNIQUE,
+    nombre VARCHAR(150) NOT NULL,
+    descripcion TEXT,
+    tipo tipo_repuesto NOT NULL,
+    marca VARCHAR(100),
+    modelo VARCHAR(100),
+    cantidad_actual INTEGER DEFAULT 0 CHECK (cantidad_actual >= 0),
+    stock_minimo INTEGER DEFAULT 5,
+    stock_maximo INTEGER,
+    unidad_medida VARCHAR(20) DEFAULT 'unidad',
+    precio_referencia DECIMAL(12,2),
+    compatible_con JSONB, -- Array de equipos compatibles
+    ubicacion_bodega VARCHAR(100),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para repuestos
+CREATE INDEX idx_repuestos_codigo ON repuestos(codigo);
+CREATE INDEX idx_repuestos_tipo ON repuestos(tipo);
+CREATE INDEX idx_repuestos_stock_bajo ON repuestos(cantidad_actual) 
+    WHERE cantidad_actual <= stock_minimo;
+
+-- ============================================
+-- TABLA: reparaciones
+-- ============================================
+
+CREATE TABLE reparaciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nro_reparacion VARCHAR(50) UNIQUE,
+    fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_fin TIMESTAMP,
+    descripcion_problema TEXT NOT NULL,
+    descripcion_solucion TEXT,
+    diagnostico TEXT,
+    costo_mano_obra DECIMAL(12,2) DEFAULT 0,
+    costo_repuestos DECIMAL(12,2) DEFAULT 0,
+    costo_total DECIMAL(12,2) GENERATED ALWAYS AS (costo_mano_obra + costo_repuestos) STORED,
+    estado estado_reparacion DEFAULT 'pendiente',
+    prioridad prioridad_incidencia DEFAULT 'media',
+    tiempo_estimado_horas INTEGER,
+    id_equipo UUID NOT NULL REFERENCES equipos(id) ON DELETE CASCADE,
+    id_tecnico UUID REFERENCES usuarios(id),
+    id_supervisor UUID REFERENCES usuarios(id),
+    observaciones TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para reparaciones
+CREATE INDEX idx_reparaciones_equipo ON reparaciones(id_equipo);
+CREATE INDEX idx_reparaciones_tecnico ON reparaciones(id_tecnico);
+CREATE INDEX idx_reparaciones_estado ON reparaciones(estado);
+CREATE INDEX idx_reparaciones_fecha ON reparaciones(fecha_inicio DESC);
+
+-- Trigger para generar número de reparación
+CREATE SEQUENCE seq_nro_reparacion START 1;
+
+CREATE OR REPLACE FUNCTION generar_nro_reparacion()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.nro_reparacion := 'REP-' || TO_CHAR(CURRENT_DATE, 'YYYY') || 
+                          '-' || LPAD(nextval('seq_nro_reparacion')::TEXT, 5, '0');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_generar_nro_reparacion
+    BEFORE INSERT ON reparaciones
+    FOR EACH ROW
+    EXECUTE FUNCTION generar_nro_reparacion();
+
+-- ============================================
+-- TABLA: detalle_reparacion
+-- ============================================
+
+CREATE TABLE detalle_reparacion (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_reparacion UUID NOT NULL REFERENCES reparaciones(id) ON DELETE CASCADE,
+    id_repuesto UUID NOT NULL REFERENCES repuestos(id),
+    cantidad_usada INTEGER NOT NULL CHECK (cantidad_usada > 0),
+    precio_unitario DECIMAL(12,2) NOT NULL,
+    subtotal DECIMAL(12,2) GENERATED ALWAYS AS (cantidad_usada * precio_unitario) STORED,
+    observaciones TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para detalle_reparacion
+CREATE INDEX idx_detalle_reparacion_reparacion ON detalle_reparacion(id_reparacion);
+CREATE INDEX idx_detalle_reparacion_repuesto ON detalle_reparacion(id_repuesto);
+
+-- ============================================
+-- TABLA: compras_repuesto
+-- ============================================
+
+CREATE TABLE compras_repuesto (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nro_orden VARCHAR(50) UNIQUE,
+    fecha_solicitud TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_aprobacion TIMESTAMP,
+    fecha_recepcion TIMESTAMP,
+    estado estado_compra DEFAULT 'solicitada',
+    proveedor VARCHAR(150),
+    contacto_proveedor VARCHAR(255),
+    total DECIMAL(12,2) DEFAULT 0,
+    id_solicitante UUID REFERENCES usuarios(id),
+    id_aprobador UUID REFERENCES usuarios(id),
+    observaciones TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para compras_repuesto
+CREATE INDEX idx_compras_estado ON compras_repuesto(estado);
+CREATE INDEX idx_compras_fecha ON compras_repuesto(fecha_solicitud DESC);
+
+-- Trigger para generar número de orden
+CREATE SEQUENCE seq_nro_orden START 1;
+
+CREATE OR REPLACE FUNCTION generar_nro_orden()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.nro_orden := 'OC-' || TO_CHAR(CURRENT_DATE, 'YYYY') || 
+                     '-' || LPAD(nextval('seq_nro_orden')::TEXT, 5, '0');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_generar_nro_orden
+    BEFORE INSERT ON compras_repuesto
+    FOR EACH ROW
+    EXECUTE FUNCTION generar_nro_orden();
+
+-- ============================================
+-- TABLA: detalle_compra
+-- ============================================
+
+CREATE TABLE detalle_compra (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_compra UUID NOT NULL REFERENCES compras_repuesto(id) ON DELETE CASCADE,
+    id_repuesto UUID NOT NULL REFERENCES repuestos(id),
+    cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+    precio_unitario DECIMAL(12,2) NOT NULL,
+    subtotal DECIMAL(12,2) GENERATED ALWAYS AS (cantidad * precio_unitario) STORED,
+    observaciones TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para detalle_compra
+CREATE INDEX idx_detalle_compra_compra ON detalle_compra(id_compra);
+CREATE INDEX idx_detalle_compra_repuesto ON detalle_compra(id_repuesto);
+
+-- ============================================
+-- TABLA: incidencias
+-- ============================================
+
+CREATE TABLE incidencias (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nro_incidencia VARCHAR(50) UNIQUE,
+    titulo VARCHAR(200) NOT NULL,
+    descripcion TEXT NOT NULL,
+    fecha_reporte TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_asignacion TIMESTAMP,
+    fecha_resolucion TIMESTAMP,
+    estado estado_incidencia DEFAULT 'reportada',
+    prioridad prioridad_incidencia DEFAULT 'media',
+    id_equipo UUID REFERENCES equipos(id),
+    id_reportante UUID NOT NULL REFERENCES usuarios(id),
+    id_asignado UUID REFERENCES usuarios(id),
+    solucion TEXT,
+    observaciones TEXT,
+    archivos_adjuntos JSONB, -- URLs de S3
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para incidencias
+CREATE INDEX idx_incidencias_equipo ON incidencias(id_equipo);
+CREATE INDEX idx_incidencias_reportante ON incidencias(id_reportante);
+CREATE INDEX idx_incidencias_asignado ON incidencias(id_asignado);
+CREATE INDEX idx_incidencias_estado ON incidencias(estado);
+CREATE INDEX idx_incidencias_prioridad ON incidencias(prioridad);
+CREATE INDEX idx_incidencias_fecha ON incidencias(fecha_reporte DESC);
+
+-- Trigger para generar número de incidencia
+CREATE SEQUENCE seq_nro_incidencia START 1;
+
+CREATE OR REPLACE FUNCTION generar_nro_incidencia()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.nro_incidencia := 'INC-' || TO_CHAR(CURRENT_DATE, 'YYYY') || 
+                          '-' || LPAD(nextval('seq_nro_incidencia')::TEXT, 5, '0');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_generar_nro_incidencia
+    BEFORE INSERT ON incidencias
+    FOR EACH ROW
+    EXECUTE FUNCTION generar_nro_incidencia();
+
+-- ============================================
+-- TABLA: reportes
+-- ============================================
+
+CREATE TABLE reportes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tipo tipo_reporte NOT NULL,
+    titulo VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    fecha_generacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    formato VARCHAR(20) DEFAULT 'pdf', -- pdf, excel, csv
+    parametros JSONB, -- Filtros usados
+    url_archivo VARCHAR(500), -- S3 URL
+    tamanio_bytes BIGINT,
+    id_usuario UUID NOT NULL REFERENCES usuarios(id),
+    descargas INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para reportes
+CREATE INDEX idx_reportes_tipo ON reportes(tipo);
+CREATE INDEX idx_reportes_usuario ON reportes(id_usuario);
+CREATE INDEX idx_reportes_fecha ON reportes(fecha_generacion DESC);
+
+-- ============================================
+-- TABLA: auditoria
+-- ============================================
+
+CREATE TABLE auditoria (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tabla VARCHAR(50) NOT NULL,
+    operacion VARCHAR(20) NOT NULL, -- INSERT, UPDATE, DELETE
+    id_registro UUID,
+    usuario_id UUID REFERENCES usuarios(id),
+    datos_anteriores JSONB,
+    datos_nuevos JSONB,
+    ip_address INET,
+    user_agent TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para auditoria
+CREATE INDEX idx_auditoria_tabla ON auditoria(tabla);
+CREATE INDEX idx_auditoria_operacion ON auditoria(operacion);
+CREATE INDEX idx_auditoria_usuario ON auditoria(usuario_id);
+CREATE INDEX idx_auditoria_timestamp ON auditoria(timestamp DESC);
+
+-- Particionamiento por mes (para escalabilidad)
+-- Esto se puede implementar después con pg_partman
+
+-- ============================================
+-- TABLA: sesiones (para tokens)
+-- ============================================
+
+CREATE TABLE sesiones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    refresh_token VARCHAR(500) NOT NULL,
+    ip_address INET,
+    user_agent TEXT,
+    expira_en TIMESTAMP NOT NULL,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para sesiones
+CREATE INDEX idx_sesiones_user_id ON sesiones(user_id);
+CREATE INDEX idx_sesiones_refresh_token ON sesiones(refresh_token);
+CREATE INDEX idx_sesiones_expira_en ON sesiones(expira_en);
+
+-- ============================================
+-- FUNCIÓN: Actualizar updated_at automáticamente
+-- ============================================
+
+CREATE OR REPLACE FUNCTION actualizar_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Aplicar a todas las tablas con updated_at
+CREATE TRIGGER trg_usuarios_updated_at BEFORE UPDATE ON usuarios
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+CREATE TRIGGER trg_ubicaciones_updated_at BEFORE UPDATE ON ubicaciones
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+CREATE TRIGGER trg_equipos_updated_at BEFORE UPDATE ON equipos
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+CREATE TRIGGER trg_repuestos_updated_at BEFORE UPDATE ON repuestos
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+CREATE TRIGGER trg_reparaciones_updated_at BEFORE UPDATE ON reparaciones
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+CREATE TRIGGER trg_compras_updated_at BEFORE UPDATE ON compras_repuesto
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+CREATE TRIGGER trg_incidencias_updated_at BEFORE UPDATE ON incidencias
+    FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+
+-- ============================================
+-- FUNCIÓN: Actualizar stock de repuestos
+-- ============================================
+
+CREATE OR REPLACE FUNCTION actualizar_stock_repuesto()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        -- Restar del stock cuando se usa en una reparación
+        UPDATE repuestos
+        SET cantidad_actual = cantidad_actual - NEW.cantidad_usada
+        WHERE id = NEW.id_repuesto;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_actualizar_stock_reparacion
+    AFTER INSERT ON detalle_reparacion
+    FOR EACH ROW
+    EXECUTE FUNCTION actualizar_stock_repuesto();
+
+-- ============================================
+-- FUNCIÓN: Sumar stock cuando se recibe compra
+-- ============================================
+
+CREATE OR REPLACE FUNCTION recibir_compra_repuesto()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.estado = 'recibida' AND OLD.estado != 'recibida' THEN
+        -- Sumar las cantidades de todos los repuestos de esta compra
+        UPDATE repuestos r
+        SET cantidad_actual = cantidad_actual + dc.cantidad
+        FROM detalle_compra dc
+        WHERE dc.id_compra = NEW.id
+        AND r.id = dc.id_repuesto;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_recibir_compra
+    AFTER UPDATE ON compras_repuesto
+    FOR EACH ROW
+    WHEN (OLD.estado IS DISTINCT FROM NEW.estado)
+    EXECUTE FUNCTION recibir_compra_repuesto();
+
+-- ============================================
+-- VISTAS ÚTILES
+-- ============================================
+
+-- Vista de equipos con información completa
+CREATE VIEW v_equipos_completo AS
+SELECT 
+    e.id,
+    e.codigo_qr,
+    e.nombre,
+    e.marca,
+    e.modelo,
+    e.nro_serie,
+    e.estado,
+    e.fecha_adquisicion,
+    u.nombre_sala AS ubicacion,
+    u.edificio,
+    u.piso,
+    CONCAT(resp.nombre, ' ', resp.apellido) AS responsable,
+    resp.correo AS correo_responsable,
+    e.created_at,
+    e.updated_at
+FROM equipos e
+LEFT JOIN ubicaciones u ON e.id_ubicacion = u.id
+LEFT JOIN usuarios resp ON e.id_responsable = resp.id
+WHERE e.activo = true;
+
+-- Vista de repuestos bajo stock
+CREATE VIEW v_repuestos_bajo_stock AS
+SELECT 
+    r.id,
+    r.codigo,
+    r.nombre,
+    r.tipo,
+    r.cantidad_actual,
+    r.stock_minimo,
+    (r.stock_minimo - r.cantidad_actual) AS faltante,
+    r.precio_referencia,
+    (r.stock_minimo - r.cantidad_actual) * r.precio_referencia AS costo_reposicion
+FROM repuestos r
+WHERE r.cantidad_actual <= r.stock_minimo
+AND r.activo = true
+ORDER BY (r.stock_minimo - r.cantidad_actual) DESC;
+
+-- Vista de reparaciones pendientes
+CREATE VIEW v_reparaciones_pendientes AS
+SELECT 
+    r.id,
+    r.nro_reparacion,
+    r.fecha_inicio,
+    r.estado,
+    r.prioridad,
+    e.codigo_qr AS equipo_codigo,
+    e.nombre AS equipo_nombre,
+    CONCAT(t.nombre, ' ', t.apellido) AS tecnico,
+    r.descripcion_problema,
+    EXTRACT(DAY FROM CURRENT_TIMESTAMP - r.fecha_inicio) AS dias_transcurridos
+FROM reparaciones r
+INNER JOIN equipos e ON r.id_equipo = e.id
+LEFT JOIN usuarios t ON r.id_tecnico = t.id
+WHERE r.estado IN ('pendiente', 'en_proceso')
+ORDER BY r.prioridad DESC, r.fecha_inicio ASC;
+
+-- ============================================
+-- DATOS DE PRUEBA
+-- ============================================
+
+-- Usuario administrador por defecto (contraseña: Admin123!)
+-- NOTA: En producción, cambiar inmediatamente
+INSERT INTO usuarios (nombre, apellido, correo, password_hash, rol) VALUES
+('Admin', 'Sistema', 'admin@sigelin.cl', 
+ crypt('Admin123!', gen_salt('bf', 12)), 'administrador');
+
+-- Ubicaciones de ejemplo
+INSERT INTO ubicaciones (nombre_sala, piso, edificio, capacidad) VALUES
+('Laboratorio 301', 3, 'Edificio A', 30),
+('Laboratorio 302', 3, 'Edificio A', 30),
+('Laboratorio Biología', 2, 'Edificio B', 25),
+('Sala Servidores', 1, 'Edificio A', 5),
+('Taller Mecánica', 1, 'Edificio C', 20);
+
+-- ============================================
+-- COMENTARIOS EN TABLAS (Documentación)
+-- ============================================
+
+COMMENT ON TABLE usuarios IS 'Almacena información de todos los usuarios del sistema con diferentes roles';
+COMMENT ON TABLE equipos IS 'Registro de todos los equipos del laboratorio con su información y estado';
+COMMENT ON TABLE reparaciones IS 'Historial de reparaciones realizadas a los equipos';
+COMMENT ON TABLE repuestos IS 'Inventario de repuestos y materiales disponibles';
+COMMENT ON TABLE incidencias IS 'Reportes de problemas o fallas en equipos';
+COMMENT ON TABLE auditoria IS 'Registro de auditoría de todas las operaciones críticas del sistema';
+
+-- ============================================
+-- FIN DEL SCRIPT
+-- ============================================
+
+
+-- ============================================
+-- SIGELIN - Datos de Prueba
+-- Script para poblar la base de datos con datos de testing
+-- ============================================
+
+-- ============================================
+-- USUARIOS DE PRUEBA
+-- ============================================
+
+-- Contraseña para todos: Test123!
+INSERT INTO usuarios (nombre, apellido, correo, password_hash, rol, telefono) VALUES
+-- Administradores
+('Carlos', 'Rodríguez', 'carlos.rodriguez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'administrador', '+56912345678'),
+
+-- Coordinadores
+('María', 'González', 'maria.gonzalez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'coordinador', '+56912345679'),
+('Pedro', 'Sánchez', 'pedro.sanchez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'coordinador', '+56912345680'),
+
+-- Técnicos
+('Juan', 'Pérez', 'juan.perez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'tecnico', '+56912345681'),
+('Ana', 'Martínez', 'ana.martinez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'tecnico', '+56912345682'),
+('Luis', 'Torres', 'luis.torres@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'tecnico', '+56912345683'),
+
+-- Administradores de bodega
+('Carmen', 'López', 'carmen.lopez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'bodega', '+56912345684'),
+('Roberto', 'Flores', 'roberto.flores@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'bodega', '+56912345685'),
+
+-- Jefes de área
+('Patricia', 'Ramírez', 'patricia.ramirez@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'jefe_area', '+56912345686'),
+('Diego', 'Castro', 'diego.castro@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'jefe_area', '+56912345687'),
+
+-- Usuarios regulares
+('Sofía', 'Vargas', 'sofia.vargas@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'usuario', '+56912345688'),
+('Andrés', 'Morales', 'andres.morales@inacap.cl', crypt('Test123!', gen_salt('bf', 12)), 'usuario', '+56912345689');
+
+-- ============================================
+-- UBICACIONES ADICIONALES
+-- ============================================
+
+INSERT INTO ubicaciones (nombre_sala, piso, edificio, capacidad, descripcion) VALUES
+('Laboratorio Química 101', 1, 'Edificio B', 28, 'Laboratorio equipado para prácticas de química general'),
+('Laboratorio Física 201', 2, 'Edificio B', 26, 'Laboratorio de física experimental'),
+('Sala Computación 401', 4, 'Edificio A', 35, 'Sala con computadores para programación'),
+('Laboratorio Electrónica', 2, 'Edificio C', 22, 'Taller de electrónica y circuitos'),
+('Sala de Proyectos', 3, 'Edificio A', 15, 'Sala para trabajo en equipo'),
+('Bodega General', 1, 'Edificio A', 100, 'Bodega principal de equipos y repuestos'),
+('Laboratorio Redes', 3, 'Edificio C', 20, 'Laboratorio de redes y telecomunicaciones');
+
+-- ============================================
+-- EQUIPOS
+-- ============================================
+
+-- Obtener IDs de usuarios y ubicaciones para referencias
+DO $$
+DECLARE
+    tecnico_id UUID;
+    jefe_id UUID;
+    loc_lab301 UUID;
+    loc_lab302 UUID;
+    loc_bio UUID;
+    loc_serv UUID;
+    loc_comp401 UUID;
+    loc_elec UUID;
+    loc_redes UUID;
+BEGIN
+    SELECT id INTO tecnico_id FROM usuarios WHERE correo = 'juan.perez@inacap.cl';
+    SELECT id INTO jefe_id FROM usuarios WHERE correo = 'patricia.ramirez@inacap.cl';
+    SELECT id INTO loc_lab301 FROM ubicaciones WHERE nombre_sala = 'Laboratorio 301';
+    SELECT id INTO loc_lab302 FROM ubicaciones WHERE nombre_sala = 'Laboratorio 302';
+    SELECT id INTO loc_bio FROM ubicaciones WHERE nombre_sala = 'Laboratorio Biología';
+    SELECT id INTO loc_serv FROM ubicaciones WHERE nombre_sala = 'Sala Servidores';
+    SELECT id INTO loc_comp401 FROM ubicaciones WHERE nombre_sala = 'Sala Computación 401';
+    SELECT id INTO loc_elec FROM ubicaciones WHERE nombre_sala = 'Laboratorio Electrónica';
+    SELECT id INTO loc_redes FROM ubicaciones WHERE nombre_sala = 'Laboratorio Redes';
+
+    -- Computadores
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, id_ubicacion, id_responsable) VALUES
+    ('QR-EQ-0001', 'Computador Desktop 01', 'HP', 'ProDesk 400 G7', 'HP001SN2023001', 'operativo', '2023-01-15', 650000, loc_lab301, jefe_id),
+    ('QR-EQ-0002', 'Computador Desktop 02', 'HP', 'ProDesk 400 G7', 'HP001SN2023002', 'operativo', '2023-01-15', 650000, loc_lab301, jefe_id),
+    ('QR-EQ-0003', 'Computador Desktop 03', 'Dell', 'OptiPlex 7090', 'DELL002SN2023001', 'mantenimiento', '2023-02-20', 720000, loc_comp401, jefe_id),
+    ('QR-EQ-0004', 'Computador Desktop 04', 'Lenovo', 'ThinkCentre M720', 'LNV003SN2023001', 'operativo', '2023-02-20', 680000, loc_comp401, jefe_id);
+
+    -- Servidores
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, garantia_meses, id_ubicacion, id_responsable) VALUES
+    ('QR-SRV-0001', 'Servidor Principal', 'Dell', 'PowerEdge R740', 'DELLSRV2023001', 'operativo', '2023-03-10', 4500000, 36, loc_serv, jefe_id),
+    ('QR-SRV-0002', 'Servidor Backup', 'HP', 'ProLiant DL380 Gen10', 'HPSRV2023001', 'reparacion', '2023-03-10', 3800000, 36, loc_serv, jefe_id);
+
+    -- Proyectores
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, id_ubicacion, id_responsable) VALUES
+    ('QR-PRJ-0001', 'Proyector Multimedia 01', 'Epson', 'EB-X05', 'EPS2023PRJ001', 'mantenimiento', '2023-01-20', 350000, loc_lab301, jefe_id),
+    ('QR-PRJ-0002', 'Proyector Multimedia 02', 'BenQ', 'MH535FHD', 'BNQ2023PRJ001', 'operativo', '2023-01-20', 420000, loc_lab302, jefe_id),
+    ('QR-PRJ-0003', 'Proyector Multimedia 03', 'Epson', 'EB-X05', 'EPS2023PRJ002', 'operativo', '2023-02-15', 350000, loc_bio, jefe_id);
+
+    -- Microscopios
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, id_ubicacion, id_responsable) VALUES
+    ('QR-MIC-0001', 'Microscopio Digital 01', 'Olympus', 'CX23', 'OLY2023MIC001', 'operativo', '2023-01-25', 850000, loc_bio, jefe_id),
+    ('QR-MIC-0002', 'Microscopio Digital 02', 'Olympus', 'CX23', 'OLY2023MIC002', 'operativo', '2023-01-25', 850000, loc_bio, jefe_id),
+    ('QR-MIC-0003', 'Microscopio Compuesto', 'Nikon', 'Eclipse E200', 'NIK2023MIC001', 'operativo', '2023-02-10', 950000, loc_bio, jefe_id);
+
+    -- Equipos de laboratorio
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, id_ubicacion, id_responsable) VALUES
+    ('QR-OSC-0001', 'Osciloscopio Digital', 'Tektronix', 'TBS2104', 'TEK2023OSC001', 'operativo', '2023-03-05', 1200000, loc_elec, jefe_id),
+    ('QR-MLT-0001', 'Multímetro Digital', 'Fluke', '87V', 'FLK2023MLT001', 'operativo', '2023-01-30', 450000, loc_elec, jefe_id),
+    ('QR-GEN-0001', 'Generador de Funciones', 'Rigol', 'DG1032Z', 'RIG2023GEN001', 'operativo', '2023-03-05', 380000, loc_elec, jefe_id);
+
+    -- Equipos de red
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, id_ubicacion, id_responsable) VALUES
+    ('QR-RTR-0001', 'Router Cisco', 'Cisco', '2911', 'CSC2023RTR001', 'operativo', '2023-02-28', 850000, loc_redes, jefe_id),
+    ('QR-SWT-0001', 'Switch Administrable', 'Cisco', 'Catalyst 2960', 'CSC2023SWT001', 'operativo', '2023-02-28', 650000, loc_redes, jefe_id),
+    ('QR-SWT-0002', 'Switch Administrable', 'Cisco', 'Catalyst 2960', 'CSC2023SWT002', 'operativo', '2023-02-28', 650000, loc_redes, jefe_id);
+
+    -- Impresoras
+    INSERT INTO equipos (codigo_qr, nombre, marca, modelo, nro_serie, estado, fecha_adquisicion, valor_compra, id_ubicacion, id_responsable) VALUES
+    ('QR-IMP-0001', 'Impresora Láser', 'HP', 'LaserJet Pro M404dn', 'HP2023IMP001', 'operativo', '2023-01-10', 280000, loc_lab301, jefe_id),
+    ('QR-IMP-0002', 'Impresora Multifuncional', 'Brother', 'MFC-L2750DW', 'BRO2023IMP001', 'operativo', '2023-01-10', 320000, loc_lab302, jefe_id),
+    ('QR-IMP-0003', 'Impresora Láser', 'HP', 'LaserJet Pro M404dn', 'HP2023IMP002', 'reparacion', '2023-01-10', 280000, loc_comp401, jefe_id);
+END $$;
+
+-- ============================================
+-- REPUESTOS
+-- ============================================
+
+INSERT INTO repuestos (codigo, nombre, descripcion, tipo, marca, modelo, cantidad_actual, stock_minimo, stock_maximo, precio_referencia, ubicacion_bodega) VALUES
+-- Hardware
+('REP-HDD-001', 'Disco Duro 1TB SATA', 'Disco duro interno 3.5" 7200 RPM', 'hardware', 'Western Digital', 'Blue 1TB', 4, 8, 20, 45000, 'Estante A1'),
+('REP-HDD-002', 'Disco Duro 2TB SATA', 'Disco duro interno 3.5" 7200 RPM', 'hardware', 'Seagate', 'BarraCuda 2TB', 6, 5, 15, 65000, 'Estante A1'),
+('REP-SSD-001', 'SSD 240GB', 'Unidad SSD SATA III 2.5"', 'hardware', 'Kingston', 'A400 240GB', 12, 10, 25, 28000, 'Estante A2'),
+('REP-SSD-002', 'SSD 480GB', 'Unidad SSD SATA III 2.5"', 'hardware', 'Kingston', 'A400 480GB', 8, 8, 20, 48000, 'Estante A2'),
+('REP-RAM-001', 'Memoria RAM 8GB DDR4', 'Memoria DDR4 2666MHz', 'hardware', 'Crucial', 'CT8G4DFS8266', 18, 15, 40, 32000, 'Estante A3'),
+('REP-RAM-002', 'Memoria RAM 16GB DDR4', 'Memoria DDR4 3200MHz', 'hardware', 'Corsair', 'Vengeance 16GB', 25, 15, 35, 55000, 'Estante A3'),
+('REP-PSU-001', 'Fuente de Poder 500W', 'Fuente certificada 80+ Bronze', 'hardware', 'EVGA', '500W 80+ Bronze', 10, 8, 20, 42000, 'Estante A4'),
+
+-- Consumibles
+('REP-LAM-001', 'Lámpara Proyector Epson', 'Lámpara original compatible con EB-X05', 'consumible', 'Epson', 'ELPLP96', 3, 10, 25, 85000, 'Estante B1'),
+('REP-LAM-002', 'Lámpara Proyector BenQ', 'Lámpara original compatible con MH535FHD', 'consumible', 'BenQ', '5J.J9H05.001', 8, 8, 20, 92000, 'Estante B1'),
+('REP-TON-001', 'Toner HP LaserJet', 'Toner negro original', 'consumible', 'HP', 'CF259A', 15, 12, 30, 68000, 'Estante B2'),
+('REP-TON-002', 'Toner Brother', 'Toner negro alto rendimiento', 'consumible', 'Brother', 'TN-2370', 12, 10, 25, 42000, 'Estante B2'),
+
+-- Herramientas
+('REP-HER-001', 'Destornillador de Precisión Set', 'Kit de 32 piezas', 'herramienta', 'Stanley', 'STHT66039', 5, 3, 10, 18000, 'Estante C1'),
+('REP-HER-002', 'Pinza Pelacables', 'Pinza para cables de red', 'herramienta', 'Klein Tools', '11063W', 8, 5, 15, 22000, 'Estante C1'),
+('REP-HER-003', 'Multímetro Básico', 'Multímetro digital portátil', 'herramienta', 'UNI-T', 'UT33C', 6, 4, 12, 15000, 'Estante C2'),
+
+-- Accesorios
+('REP-CAB-001', 'Cable HDMI 2m', 'Cable HDMI 2.0 certificado', 'accesorio', 'Belkin', 'AV10176bt2M', 25, 20, 50, 8000, 'Estante D1'),
+('REP-CAB-002', 'Cable VGA 3m', 'Cable VGA para video', 'accesorio', 'Generic', 'VGA-3M', 18, 15, 40, 4000, 'Estante D1'),
+('REP-CAB-003', 'Cable Ethernet Cat6 5m', 'Cable UTP categoría 6', 'accesorio', 'Panduit', 'NetKey', 30, 25, 60, 3500, 'Estante D2'),
+('REP-TEC-001', 'Teclado USB', 'Teclado estándar español', 'accesorio', 'Logitech', 'K120', 20, 15, 35, 12000, 'Estante D3'),
+('REP-MOU-001', 'Mouse USB', 'Mouse óptico USB', 'accesorio', 'Logitech', 'M100', 22, 18, 40, 6000, 'Estante D3');
+
+-- ============================================
+-- REPARACIONES
+-- ============================================
+
+DO $$
+DECLARE
+    eq_proj_id UUID;
+    eq_srv_id UUID;
+    eq_imp_id UUID;
+    eq_comp_id UUID;
+    tec1_id UUID;
+    tec2_id UUID;
+    rep_lam_id UUID;
+    rep_ssd_id UUID;
+    rep_ton_id UUID;
+BEGIN
+    -- Obtener IDs
+    SELECT id INTO eq_proj_id FROM equipos WHERE codigo_qr = 'QR-PRJ-0001';
+    SELECT id INTO eq_srv_id FROM equipos WHERE codigo_qr = 'QR-SRV-0002';
+    SELECT id INTO eq_imp_id FROM equipos WHERE codigo_qr = 'QR-IMP-0003';
+    SELECT id INTO eq_comp_id FROM equipos WHERE codigo_qr = 'QR-EQ-0003';
+    SELECT id INTO tec1_id FROM usuarios WHERE correo = 'juan.perez@inacap.cl';
+    SELECT id INTO tec2_id FROM usuarios WHERE correo = 'ana.martinez@inacap.cl';
+    SELECT id INTO rep_lam_id FROM repuestos WHERE codigo = 'REP-LAM-001';
+    SELECT id INTO rep_ssd_id FROM repuestos WHERE codigo = 'REP-SSD-001';
+    SELECT id INTO rep_ton_id FROM repuestos WHERE codigo = 'REP-TON-001';
+
+    -- Reparación completada: Cambio de lámpara proyector
+    INSERT INTO reparaciones (fecha_inicio, fecha_fin, descripcion_problema, descripcion_solucion, estado, prioridad, id_equipo, id_tecnico, costo_mano_obra)
+    VALUES (
+        CURRENT_TIMESTAMP - INTERVAL '15 days',
+        CURRENT_TIMESTAMP - INTERVAL '14 days',
+        'Proyector no enciende correctamente, imagen muy tenue',
+        'Se reemplazó lámpara principal. Equipo funcionando correctamente',
+        'completada',
+        'alta',
+        eq_proj_id,
+        tec1_id,
+        25000
+    );
+
+    -- Agregar repuesto usado
+    INSERT INTO detalle_reparacion (id_reparacion, id_repuesto, cantidad_usada, precio_unitario)
+    SELECT id, rep_lam_id, 1, 85000 FROM reparaciones WHERE id_equipo = eq_proj_id;
+
+    -- Reparación en proceso: Servidor con falla
+    INSERT INTO reparaciones (fecha_inicio, descripcion_problema, diagnostico, estado, prioridad, tiempo_estimado_horas, id_equipo, id_tecnico, costo_mano_obra)
+    VALUES (
+        CURRENT_TIMESTAMP - INTERVAL '3 days',
+        'Servidor reiniciándose aleatoriamente, errores en logs',
+        'Disco duro con sectores defectuosos. Se requiere reemplazo',
+        'en_proceso',
+        'critica',
+        8,
+        eq_srv_id,
+        tec2_id,
+        120000
+    );
+
+    -- Reparación pendiente: Impresora
+    INSERT INTO reparaciones (fecha_inicio, descripcion_problema, estado, prioridad, id_equipo, costo_mano_obra)
+    VALUES (
+        CURRENT_TIMESTAMP - INTERVAL '1 day',
+        'Impresora no imprime, atascos frecuentes de papel',
+        'pendiente',
+        'media',
+        eq_imp_id,
+        18000
+    );
+
+    -- Reparación completada antigua: Actualización SSD
+    INSERT INTO reparaciones (fecha_inicio, fecha_fin, descripcion_problema, descripcion_solucion, estado, prioridad, id_equipo, id_tecnico, costo_mano_obra)
+    VALUES (
+        CURRENT_TIMESTAMP - INTERVAL '30 days',
+        CURRENT_TIMESTAMP - INTERVAL '29 days',
+        'Computador muy lento, disco duro con ruidos',
+        'Se instaló SSD nuevo, se migró sistema operativo',
+        'completada',
+        'media',
+        eq_comp_id,
+        tec1_id,
+        35000
+    );
+
+    INSERT INTO detalle_reparacion (id_reparacion, id_repuesto, cantidad_usada, precio_unitario)
+    SELECT id, rep_ssd_id, 1, 28000 FROM reparaciones WHERE id_equipo = eq_comp_id;
+END $$;
+
+-- ============================================
+-- INCIDENCIAS
+-- ============================================
+
+DO $$
+DECLARE
+    eq1_id UUID;
+    eq2_id UUID;
+    user1_id UUID;
+    tec1_id UUID;
+BEGIN
+    SELECT id INTO eq1_id FROM equipos WHERE codigo_qr = 'QR-EQ-0001';
+    SELECT id INTO eq2_id FROM equipos WHERE codigo_qr = 'QR-RTR-0001';
+    SELECT id INTO user1_id FROM usuarios WHERE correo = 'sofia.vargas@inacap.cl';
+    SELECT id INTO tec1_id FROM usuarios WHERE correo = 'juan.perez@inacap.cl';
+
+    -- Incidencia nueva
+    INSERT INTO incidencias (titulo, descripcion, prioridad, id_equipo, id_reportante)
+    VALUES (
+        'Mouse no funciona correctamente',
+        'El mouse del computador 01 presenta fallas intermitentes, se detiene frecuentemente',
+        'baja',
+        eq1_id,
+        user1_id
+    );
+
+    -- Incidencia asignada
+    INSERT INTO incidencias (titulo, descripcion, fecha_reporte, fecha_asignacion, estado, prioridad, id_equipo, id_reportante, id_asignado)
+    VALUES (
+        'Router sin conectividad',
+        'El router principal no permite conexiones nuevas, LED de error encendido',
+        CURRENT_TIMESTAMP - INTERVAL '2 hours',
+        CURRENT_TIMESTAMP - INTERVAL '1 hour',
+        'asignada',
+        'alta',
+        eq2_id,
+        user1_id,
+        tec1_id
+    );
+
+    -- Incidencia resuelta
+    INSERT INTO incidencias (titulo, descripcion, fecha_reporte, fecha_resolucion, estado, prioridad, solucion, id_equipo, id_reportante, id_asignado)
+    VALUES (
+        'Proyector sin señal',
+        'No se visualiza imagen del proyector',
+        CURRENT_TIMESTAMP - INTERVAL '5 days',
+        CURRENT_TIMESTAMP - INTERVAL '4 days',
+        'resuelta',
+        'media',
+        'Se reemplazó cable HDMI defectuoso. Problema solucionado',
+        (SELECT id FROM equipos WHERE codigo_qr = 'QR-PRJ-0002'),
+        user1_id,
+        tec1_id
+    );
+END $$;
+
+-- ============================================
+-- COMPRAS DE REPUESTOS
+-- ============================================
+
+DO $$
+DECLARE
+    bodega_id UUID;
+    coord_id UUID;
+    rep_hdd_id UUID;
+    rep_ram_id UUID;
+BEGIN
+    SELECT id INTO bodega_id FROM usuarios WHERE correo = 'carmen.lopez@inacap.cl';
+    SELECT id INTO coord_id FROM usuarios WHERE correo = 'maria.gonzalez@inacap.cl';
+    SELECT id INTO rep_hdd_id FROM repuestos WHERE codigo = 'REP-HDD-001';
+    SELECT id INTO rep_ram_id FROM repuestos WHERE codigo = 'REP-RAM-001';
+
+    -- Compra solicitada
+    INSERT INTO compras_repuesto (fecha_solicitud, estado, proveedor, contacto_proveedor, total, id_solicitante)
+    VALUES (
+        CURRENT_TIMESTAMP - INTERVAL '1 day',
+        'solicitada',
+        'TechStore Chile',
+        'ventas@techstore.cl',
+        450000,
+        bodega_id
+    );
+
+    -- Agregar detalles
+    INSERT INTO detalle_compra (id_compra, id_repuesto, cantidad, precio_unitario)
+    SELECT c.id, rep_hdd_id, 10, 45000
+    FROM compras_repuesto c
+    WHERE c.estado = 'solicitada'
+    LIMIT 1;
+
+    -- Compra aprobada y recibida (actualiza stock automáticamente)
+    INSERT INTO compras_repuesto (fecha_solicitud, fecha_aprobacion, fecha_recepcion, estado, proveedor, total, id_solicitante, id_aprobador)
+    VALUES (
+        CURRENT_TIMESTAMP - INTERVAL '15 days',
+        CURRENT_TIMESTAMP - INTERVAL '14 days',
+        CURRENT_TIMESTAMP - INTERVAL '10 days',
+        'recibida',
+        'CompuParts SpA',
+        640000,
+        bodega_id,
+        coord_id
+    );
+
+    INSERT INTO detalle_compra (id_compra, id_repuesto, cantidad, precio_unitario)
+    SELECT c.id, rep_ram_id, 20, 32000
+    FROM compras_repuesto c
+    WHERE c.estado = 'recibida'
+    LIMIT 1;
+END $$;
+
+-- ============================================
+-- HISTORIAL DE UBICACIONES
+-- ============================================
+
+DO $$
+DECLARE
+    eq_comp_id UUID;
+    loc_old UUID;
+    loc_new UUID;
+    jefe_id UUID;
+BEGIN
+    SELECT id INTO eq_comp_id FROM equipos WHERE codigo_qr = 'QR-EQ-0001';
+    SELECT id INTO loc_old FROM ubicaciones WHERE nombre_sala = 'Bodega General';
+    SELECT id INTO loc_new FROM ubicaciones WHERE nombre_sala = 'Laboratorio 301';
+    SELECT id INTO jefe_id FROM usuarios WHERE correo = 'patricia.ramirez@inacap.cl';
+
+    INSERT INTO historial_ubicacion (id_equipo, id_ubicacion_anterior, id_ubicacion_nueva, fecha_cambio, motivo, id_usuario)
+    VALUES (
+        eq_comp_id,
+        loc_old,
+        loc_new,
+        CURRENT_TIMESTAMP - INTERVAL '60 days',
+        'Instalación inicial en laboratorio',
+        jefe_id
+    );
+END $$;
+
+-- ============================================
+-- FIN DE DATOS DE PRUEBA
+-- ============================================
+
+-- Verificación de registros insertados
+SELECT 'Usuarios creados: ' || COUNT(*) FROM usuarios;
+SELECT 'Ubicaciones creadas: ' || COUNT(*) FROM ubicaciones;
+SELECT 'Equipos registrados: ' || COUNT(*) FROM equipos;
+SELECT 'Repuestos en inventario: ' || COUNT(*) FROM repuestos;
+SELECT 'Reparaciones registradas: ' || COUNT(*) FROM reparaciones;
+SELECT 'Incidencias reportadas: ' || COUNT(*) FROM incidencias;
+SELECT 'Compras de repuestos: ' || COUNT(*) FROM compras_repuesto;
