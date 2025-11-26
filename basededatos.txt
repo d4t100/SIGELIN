@@ -636,7 +636,6 @@ COMMENT ON TABLE auditoria IS 'Registro de auditoría de todas las operaciones c
 -- FIN DEL SCRIPT
 -- ============================================
 
-
 -- ============================================
 -- SIGELIN - Datos de Prueba
 -- Script para poblar la base de datos con datos de testing
