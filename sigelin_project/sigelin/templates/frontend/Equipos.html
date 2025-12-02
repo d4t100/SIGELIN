@@ -1,102 +1,198 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SIGELIN - Equipos</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Equipos - SIGELIN</title>
   <style>
-    body { font-family: 'Roboto', sans-serif; margin: 0; display: flex; background: #f5f5f5; }
-    aside { width: 220px; background: #D32F2F; color: #fff; height: 100vh; padding: 20px; }
-    aside h2 { margin-bottom: 20px; }
-    aside a { display: block; color: #fff; text-decoration: none; margin: 10px 0; }
-    aside button { margin-top: 20px; background: #fff; color: #D32F2F; border: none; padding: 10px; width: 100%; border-radius: 8px; cursor: pointer; }
-    main { flex: 1; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; background: white; }
-    th, td { border-bottom: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #D32F2F; color: white; }
-    .formulario { margin: 20px 0; }
-    input, select { padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 10px; }
-    button.registrar { background: #D32F2F; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; }
-  </style>
-<script>
-  // Verificar autenticación al cargar
-  window.addEventListener('DOMContentLoaded', async () => {
-    const isAuth = await auth.requireAuth();
-    if (!isAuth) return;
+    :root{--brand:#D32F2F;--bg:#f5f7fb;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Roboto',Arial,sans-serif;background:var(--bg);color:#0b1220;display:flex;min-height:100vh}
     
-    const user = auth.getUser();
-    // ... código específico de cada página
-  });
-</script>
+    aside{width:220px;background:var(--brand);color:#fff;padding:20px;height:100vh;position:fixed;left:0;top:0;overflow-y:auto}
+    aside h2{margin:0 0 20px;font-size:20px}
+    aside a{display:block;color:#fff;text-decoration:none;margin:10px 0;padding:10px;border-radius:6px;transition:background 0.3s}
+    aside a:hover{background:rgba(255,255,255,0.1)}
+    aside a.active{background:rgba(255,255,255,0.2)}
+    aside button{margin-top:20px;background:#fff;color:var(--brand);border:none;padding:10px;width:100%;border-radius:8px;cursor:pointer;font-weight:600}
+    aside button:hover{background:#f5f5f5}
+    
+    main{flex:1;margin-left:220px;padding:20px;width:calc(100% - 220px)}
+    
+    .header{background:#fff;padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+    .header h1{margin:0 0 8px;color:var(--brand)}
+    
+    .user-badge{background:rgba(255,255,255,0.1);padding:12px;border-radius:8px;margin-bottom:20px}
+    .user-badge .name{font-weight:700;font-size:16px;margin-bottom:4px}
+    .user-badge .role{font-size:13px;opacity:0.8}
+    
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+    th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
+    th{background:var(--brand);color:#fff;font-weight:600}
+    tr:last-child td{border-bottom:none}
+    
+    .formulario{background:#fff;padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+    .form-row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+    input,select{padding:10px;border-radius:6px;border:1px solid #ddd;flex:1;min-width:150px}
+    .btn{background:var(--brand);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600}
+    .btn:hover{background:#b71c1c}
+    
+    @media(max-width:768px){
+      aside{width:100%;height:auto;position:relative}
+      main{margin-left:0;width:100%}
+    }
+  </style>
+  <script src="/static/frontend/auth.js"></script>
 </head>
 <body>
   <aside>
-  <h2>SIGELIN</h2>
-  <a href="/dashboard.html">📊 Panel</a>
-  <a href="/equipos.html" class="active">🖥️ Equipos</a>
-  <a href="/reparaciones.html">🔧 Reparaciones</a>
-  <a href="/inventario.html">📦 Inventario</a>
-  <a href="/reportes.html">📄 Reportes</a>
-  <button onclick="logout()">Cerrar sesión</button>
-</aside>
-  <main>
-    <h1>Gestión de Equipos</h1>
-    <div class="formulario">
-      <input id="nombre" placeholder="Nombre del equipo">
-      <input id="marca" placeholder="Marca">
-      <input id="modelo" placeholder="Modelo">
-      <select id="estado">
-        <option value="Operativo">Operativo</option>
-        <option value="En reparación">En reparación</option>
-      </select>
-      <button class="registrar" onclick="registrarEquipo()">Registrar</button>
+    <h2>SIGELIN</h2>
+    
+    <div class="user-badge">
+      <div class="name" id="sidebarName">Usuario</div>
+      <div class="role" id="sidebarRole">Rol</div>
     </div>
+    
+    <a href="/dashboard.html">📊 Panel</a>
+    <a href="/equipos.html" class="active">🖥️ Equipos</a>
+    <a href="/reparaciones.html">🔧 Reparaciones</a>
+    <a href="/inventario.html">📦 Inventario</a>
+    <a href="/reportes.html">📄 Reportes</a>
+    
+    <button onclick="logout()">Cerrar sesión</button>
+  </aside>
+
+  <main>
+    <div class="header">
+      <h1>Gestión de Equipos</h1>
+      <p>Administra el inventario de equipos del laboratorio</p>
+    </div>
+
+    <div class="formulario">
+      <h3>Registrar Nuevo Equipo</h3>
+      <div class="form-row">
+        <input id="nombre" type="text" placeholder="Nombre del equipo" />
+        <input id="marca" type="text" placeholder="Marca" />
+        <input id="modelo" type="text" placeholder="Modelo" />
+      </div>
+      <div class="form-row">
+        <input id="nro_serie" type="text" placeholder="Número de Serie" />
+        <select id="estado">
+          <option value="operativo">Operativo</option>
+          <option value="mantenimiento">En Mantenimiento</option>
+          <option value="reparacion">En Reparación</option>
+          <option value="baja">De Baja</option>
+        </select>
+        <button class="btn" onclick="registrarEquipo()">Registrar</button>
+      </div>
+    </div>
+
     <table>
       <thead>
-        <tr><th>ID</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Estado</th></tr>
+        <tr>
+          <th>Código QR</th>
+          <th>Nombre</th>
+          <th>Marca</th>
+          <th>Modelo</th>
+          <th>Serie</th>
+          <th>Estado</th>
+        </tr>
       </thead>
-      <tbody id="tabla"></tbody>
+      <tbody id="tablaEquipos">
+        <tr><td colspan="6" style="text-align:center;padding:20px">Cargando equipos...</td></tr>
+      </tbody>
     </table>
   </main>
 
-  <script>
-    const token = localStorage.getItem("sigelin_token");
-    if (!token) window.location.href = "index.html";
+<script>
+// 1. Verificar autenticación (solo revisa localStorage)
+if (!auth.requireAuth()) {
+  // Si no está autenticado, requireAuth() ya redirige
+}
 
-    async function cargarEquipos() {
-      const res = await fetch("http://localhost:8000/api/equipos/", {
-        headers: { Authorization: "Bearer " + token },
-      });
-      const data = await res.json();
-      const tabla = document.getElementById("tabla");
-      tabla.innerHTML = data.map(e => 
-        `<tr><td>${e.id}</td><td>${e.nombre}</td><td>${e.marca}</td><td>${e.modelo}</td><td>${e.estado}</td></tr>`
-      ).join('');
+// 2. Mostrar información del usuario
+const user = auth.getUser();
+if (user) {
+  const nombreCompleto = `${user.nombre || ''} ${user.apellido || ''}`.trim();
+  document.getElementById('sidebarName').textContent = nombreCompleto || user.email || 'Usuario';
+  document.getElementById('sidebarRole').textContent = user.rol || 'Sin rol';
+}
+
+// 3. Cargar equipos
+async function cargarEquipos() {
+  try {
+    const response = await fetch('/api/equipos/', {
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error('Error al cargar equipos');
     }
+    
+    const data = await response.json();
+    const tabla = document.getElementById('tablaEquipos');
+    
+    if (data.equipos && data.equipos.length > 0) {
+      tabla.innerHTML = data.equipos.map(e => `
+        <tr>
+          <td>${e.codigo_qr || 'N/A'}</td>
+          <td>${e.nombre || 'N/A'}</td>
+          <td>${e.marca || 'N/A'}</td>
+          <td>${e.modelo || 'N/A'}</td>
+          <td>${e.nro_serie || 'N/A'}</td>
+          <td>${e.estado || 'N/A'}</td>
+        </tr>
+      `).join('');
+    } else {
+      tabla.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px">No hay equipos registrados</td></tr>';
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    document.getElementById('tablaEquipos').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:red">Error al cargar equipos</td></tr>';
+  }
+}
 
-    async function registrarEquipo() {
-      const nombre = document.getElementById("nombre").value;
-      const marca = document.getElementById("marca").value;
-      const modelo = document.getElementById("modelo").value;
-      const estado = document.getElementById("estado").value;
-      if (!nombre || !marca || !modelo) return alert("Complete todos los campos");
+// 4. Registrar equipo (ejemplo básico)
+async function registrarEquipo() {
+  const nombre = document.getElementById('nombre').value.trim();
+  const marca = document.getElementById('marca').value.trim();
+  const modelo = document.getElementById('modelo').value.trim();
+  const nro_serie = document.getElementById('nro_serie').value.trim();
+  const estado = document.getElementById('estado').value;
 
-      await fetch("http://localhost:8000/api/equipos/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({ nombre, marca, modelo, estado })
-      });
-      alert("Equipo registrado correctamente");
+  if (!nombre || !marca || !modelo) {
+    alert('Complete al menos nombre, marca y modelo');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/equipos/', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ nombre, marca, modelo, nro_serie, estado })
+    });
+
+    if (response.ok) {
+      alert('Equipo registrado correctamente');
+      document.getElementById('nombre').value = '';
+      document.getElementById('marca').value = '';
+      document.getElementById('modelo').value = '';
+      document.getElementById('nro_serie').value = '';
       cargarEquipos();
+    } else {
+      alert('Error al registrar equipo');
     }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error de conexión');
+  }
+}
 
-    function logout() {
-      localStorage.clear();
-      window.location.href = "index.html";
-    }
-
-    cargarEquipos();
-  </script>
+// 5. Cargar equipos al iniciar
+cargarEquipos();
+</script>
 </body>
-<script src="/static/frontend/auth.js"></script>
 </html>

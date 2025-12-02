@@ -30,12 +30,13 @@ urlpatterns = [
     # QR
     path('equipos/<uuid:pk>/qr/', views.ver_qr_equipo, name='ver_qr_equipo'),
     
-    # Pages
-    path('dashboard.html', views.dashboard, name='dashboard'),
+    # Páginas del Frontend
     path('', views.index, name='index'),
-    
-    # Catch all para la SPA
-    re_path(r'^(?!api|admin|static).*$', views.index, name='spa_fallback'),
+    path('dashboard.html', views.dashboard, name='dashboard'),
+    path('equipos.html', views.equipos, name='equipos'),
+    path('reparaciones.html', views.reparaciones, name='reparaciones'),
+    path('inventario.html', views.inventario, name='inventario'),
+    path('reportes.html', views.reportes, name='reportes'),
 ]
 
 # Servir archivos estáticos en desarrollo

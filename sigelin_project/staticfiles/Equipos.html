@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGELIN - Equipos</title>
+  <style>
+    body { font-family: 'Roboto', sans-serif; margin: 0; display: flex; background: #f5f5f5; }
+    aside { width: 220px; background: #D32F2F; color: #fff; height: 100vh; padding: 20px; }
+    aside h2 { margin-bottom: 20px; }
+    aside a { display: block; color: #fff; text-decoration: none; margin: 10px 0; }
+    aside button { margin-top: 20px; background: #fff; color: #D32F2F; border: none; padding: 10px; width: 100%; border-radius: 8px; cursor: pointer; }
+    main { flex: 1; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { border-bottom: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #D32F2F; color: white; }
+    .formulario { margin: 20px 0; }
+    input, select { padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 10px; }
+    button.registrar { background: #D32F2F; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; }
+  </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+  });
+</script>
+</head>
+<body>
+  <aside>
+  <h2>SIGELIN</h2>
+  <a href="/dashboard.html">📊 Panel</a>
+  <a href="/equipos.html" class="active">🖥️ Equipos</a>
+  <a href="/reparaciones.html">🔧 Reparaciones</a>
+  <a href="/inventario.html">📦 Inventario</a>
+  <a href="/reportes.html">📄 Reportes</a>
+  <button onclick="logout()">Cerrar sesión</button>
+</aside>
+  <main>
+    <h1>Gestión de Equipos</h1>
+    <div class="formulario">
+      <input id="nombre" placeholder="Nombre del equipo">
+      <input id="marca" placeholder="Marca">
+      <input id="modelo" placeholder="Modelo">
+      <select id="estado">
+        <option value="Operativo">Operativo</option>
+        <option value="En reparación">En reparación</option>
+      </select>
+      <button class="registrar" onclick="registrarEquipo()">Registrar</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="tabla"></tbody>
+    </table>
+  </main>
+
+  <script>
+    const token = localStorage.getItem("sigelin_token");
+    if (!token) window.location.href = "/";
+
+    async function cargarEquipos() {
+      const res = await fetch("http://localhost:8000/api/equipos/", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      const data = await res.json();
+      const tabla = document.getElementById("tabla");
+      tabla.innerHTML = data.map(e => 
+        `<tr><td>${e.id}</td><td>${e.nombre}</td><td>${e.marca}</td><td>${e.modelo}</td><td>${e.estado}</td></tr>`
+      ).join('');
+    }
+
+    async function registrarEquipo() {
+      const nombre = document.getElementById("nombre").value;
+      const marca = document.getElementById("marca").value;
+      const modelo = document.getElementById("modelo").value;
+      const estado = document.getElementById("estado").value;
+      if (!nombre || !marca || !modelo) return alert("Complete todos los campos");
+
+      await fetch("http://localhost:8000/api/equipos/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ nombre, marca, modelo, estado })
+      });
+      alert("Equipo registrado correctamente");
+      cargarEquipos();
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = "/";
+    }
+
+    cargarEquipos();
+  </script>
+</body>
+<script src="/static/frontend/auth.js"></script>
+</html>

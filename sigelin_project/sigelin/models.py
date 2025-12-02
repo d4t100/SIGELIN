@@ -266,14 +266,37 @@ class Usuarios(models.Model):
 
 class SimpleUserManager(BaseUserManager):
     def get_by_natural_key(self, username):
-        return self.get(**{self.model.USERNAME_FIELD: username})
+        # Buscar por el campo correo (no email)
+        return self.get(**{self.model.USERNAME_FIELD + '__iexact': username})
+    
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError('El email es obligatorio')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        return user
+    
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(email, password, **extra_fields)
+
 
 class SimpleUser(AbstractBaseUser, PermissionsMixin):
+    """
+    Modelo de usuario que mapea a la tabla 'usuarios' de PostgreSQL
+    Todos los campos están mapeados correctamente con db_column
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     nombre = models.CharField(max_length=100, blank=True)
     apellido = models.CharField(max_length=100, blank=True)
-    correo = models.EmailField(max_length=255, unique=True)
-    password_hash = models.CharField(max_length=255, db_column='password_hash')
+    
+    # CRÍTICO: mapear email de Django a correo de PostgreSQL
+    email = models.EmailField('email address', max_length=255, unique=True, db_column='correo')
+    
+    # CRÍTICO: mapear password de Django a password_hash de PostgreSQL
+    password = models.CharField('password', max_length=255, db_column='password_hash')
+    
     rol = models.TextField(blank=True)
     telefono = models.CharField(max_length=20, blank=True, null=True)
     activo = models.BooleanField(default=True)
@@ -284,19 +307,16 @@ class SimpleUser(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(blank=True, null=True)
     
-    # Campos requeridos por PermissionsMixin
-    last_login = models.DateTimeField(blank=True, null=True)
-    is_superuser = models.BooleanField(default=False)
-    is_staff = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
+    # Campos adicionales requeridos por Django
+    last_login = models.DateTimeField('last login', blank=True, null=True)
+    is_superuser = models.BooleanField('superuser status', default=False)
+    is_staff = models.BooleanField('staff status', default=False)
+    is_active = models.BooleanField('active', default=True)
 
     objects = SimpleUserManager()
 
-    USERNAME_FIELD = 'correo'
+    USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
-    
-    # IMPORTANTE: Decirle a Django que NO use el campo password
-    password = None  # Desactivar el campo password de Django
 
     class Meta:
         managed = False
@@ -305,11 +325,32 @@ class SimpleUser(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = 'Users'
 
     def __str__(self):
-        return self.correo
+        return self.email
 
-    # Estos métodos no se usan porque autenticamos manualmente
+    @property
+    def correo(self):
+        """Alias para compatibilidad"""
+        return self.email
+    
+    def get_full_name(self):
+        full_name = f"{self.nombre} {self.apellido}".strip()
+        return full_name or self.email
+    
+    def get_short_name(self):
+        return self.nombre or self.email.split('@')[0]
+
     def set_password(self, raw_password):
+        """No usar el sistema de Django - las contraseñas se manejan en PostgreSQL"""
         pass
 
     def check_password(self, raw_password):
+        """La verificación se hace en el backend con bcrypt de PostgreSQL"""
         return False
+    
+    def has_perm(self, perm, obj=None):
+        """Permisos simplificados"""
+        return self.is_active and self.activo
+    
+    def has_module_perms(self, app_label):
+        """Permisos de módulo simplificados"""
+        return self.is_active and self.activo

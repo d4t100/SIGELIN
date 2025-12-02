@@ -10,9 +10,8 @@
     html,body{height:100%;margin:0;font-family:Inter,Roboto,Arial;background:#0b1220}
     body{
       display:flex;align-items:center;justify-content:center;
-      background:
-        linear-gradient(rgba(3,7,18,0.6), rgba(3,7,18,0.6)),
-        url('inacap.jpg') center/cover no-repeat;
+      background: linear-gradient(rgba(3,7,18,0.8), rgba(3,7,18,0.8)), 
+                  linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       padding:20px;
     }
 
@@ -21,7 +20,7 @@
       padding:30px;border-radius:14px;background:transparent;color:#fff;
       display:flex;flex-direction:column;gap:14px;
     }
-    .panel h1{margin:0;font-size:34px;color:var(--brand);letter-spacing:0.6px}
+    .panel h1{margin:0;font-size:34px;color:#fff;letter-spacing:0.6px}
     .panel p{margin:0;color:rgba(234,241,255,0.9);line-height:1.45}
 
     .card{background:var(--card);padding:28px;border-radius:14px;box-shadow:0 10px 30px rgba(2,6,23,0.5);backdrop-filter:blur(6px)}
@@ -37,10 +36,12 @@
 
     .demo-list{list-style:none;padding:0;margin:12px 0 0;color:#eaf3ff}
     .demo-list li{margin:8px 0;padding-left:18px;position:relative}
-    .demo-list li:before{content:"•";position:absolute;left:0;top:0;color:var(--brand)}
+    .demo-list li:before{content:"•";position:absolute;left:0;top:0;color:#fff}
     .error{color:#b91c1c;font-weight:600;margin-top:8px;display:none}
     .error.show{display:block}
     .error.success{color:#16a34a}
+
+    .logo-img{width:110px;border-radius:10px;opacity:0.9;margin-top:14px}
 
     @media (max-width:920px){
       .wrap{grid-template-columns:1fr;padding:8px}
@@ -49,7 +50,6 @@
 </head>
 <body>
   <div class="wrap" role="main">
-    <!-- LEFT: información / branding -->
     <div class="panel" aria-hidden="true">
       <h1>SIGELIN</h1>
       <p>Sistema de Gestión de Laboratorios · INACAP<br>Control de equipos, reparaciones, inventario y reportes.</p>
@@ -63,7 +63,6 @@
       <div class="small">Proyecto integrado · 2025</div>
     </div>
 
-    <!-- RIGHT: card de login -->
     <div class="card" aria-labelledby="signinTitle">
       <h2 id="signinTitle">Iniciar sesión</h2>
       <div class="muted">Usa tus credenciales institucionales</div>
@@ -79,8 +78,9 @@
       </div>
 
       <div id="error" class="error" role="status" aria-live="polite"></div>
-      <div style="text-align:center;margin-top:14px">
-        <img src="inacap.jpg" alt="Inacap" style="width:110px;border-radius:10px;opacity:0.9">
+      
+      <div style="text-align:center">
+        <img src="/static/images/inacap.jpg" alt="Inacap" class="logo-img" onerror="this.style.display='none'">
       </div>
     </div>
   </div>
@@ -88,7 +88,6 @@
 <script>
 const API_BASE = 'http://localhost:8000/api';
 
-// Si ya hay sesión, redirigir directamente al dashboard
 window.addEventListener('load', () => {
   const user = localStorage.getItem('sigelin_user');
   const token = localStorage.getItem('sigelin_token');
@@ -99,8 +98,8 @@ window.addEventListener('load', () => {
 });
 
 function fillDemo(){
-  document.getElementById('email').value = 'admin@sigelin.cl';
-  document.getElementById('password').value = '1234';
+  document.getElementById('email').value = 'carlos.rodriguez@inacap.cl';
+  document.getElementById('password').value = 'Test123!';
 }
 
 async function doLogin(){
@@ -127,6 +126,7 @@ async function doLogin(){
     const res = await fetch(`${API_BASE}/auth/login/`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
+      credentials: 'include',
       body: JSON.stringify({ correo: email, password })
     });
 
@@ -145,7 +145,7 @@ async function doLogin(){
     localStorage.setItem('sigelin_token', 'session_active');
 
     elErr.classList.add('success');
-    elErr.textContent = 'Ingreso correcto. Redirigiendo...';
+    elErr.textContent = '✓ Ingreso correcto. Redirigiendo...';
     
     setTimeout(()=> window.location.href = '/dashboard.html', 800);
     

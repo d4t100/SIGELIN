@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SIGELIN · Iniciar sesión</title>
+  <style>
+    :root{--brand:#D32F2F;--card:rgba(255,255,255,0.95);--muted:#6b7280}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,Roboto,Arial;background:#0b1220}
+    body{
+      display:flex;align-items:center;justify-content:center;
+      background:
+        linear-gradient(rgba(3,7,18,0.6), rgba(3,7,18,0.6)),
+        url('inacap.jpg') center/cover no-repeat;
+      padding:20px;
+    }
+
+    .wrap{width:100%;max-width:980px;display:grid;grid-template-columns:1fr 420px;gap:28px;align-items:center}
+    .panel{
+      padding:30px;border-radius:14px;background:transparent;color:#fff;
+      display:flex;flex-direction:column;gap:14px;
+    }
+    .panel h1{margin:0;font-size:34px;color:var(--brand);letter-spacing:0.6px}
+    .panel p{margin:0;color:rgba(234,241,255,0.9);line-height:1.45}
+
+    .card{background:var(--card);padding:28px;border-radius:14px;box-shadow:0 10px 30px rgba(2,6,23,0.5);backdrop-filter:blur(6px)}
+    .card h2{margin:0 0 8px;font-size:20px;color:#0b1220}
+    .muted{color:var(--muted);font-size:14px;margin-bottom:12px}
+
+    input{width:100%;padding:12px;border-radius:10px;border:1px solid #e6e9ee;margin:8px 0;font-size:15px}
+    .row{display:flex;gap:10px}
+    .btn{display:inline-block;padding:12px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-weight:700;cursor:pointer;width:100%}
+    .btn.ghost{background:#fff;color:var(--brand)}
+    .btn:disabled{opacity:0.6;cursor:not-allowed}
+    .small{font-size:13px;color:#94a3b8;margin-top:8px}
+
+    .demo-list{list-style:none;padding:0;margin:12px 0 0;color:#eaf3ff}
+    .demo-list li{margin:8px 0;padding-left:18px;position:relative}
+    .demo-list li:before{content:"•";position:absolute;left:0;top:0;color:var(--brand)}
+    .error{color:#b91c1c;font-weight:600;margin-top:8px;display:none}
+    .error.show{display:block}
+    .error.success{color:#16a34a}
+
+    @media (max-width:920px){
+      .wrap{grid-template-columns:1fr;padding:8px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" role="main">
+    <!-- LEFT: información / branding -->
+    <div class="panel" aria-hidden="true">
+      <h1>SIGELIN</h1>
+      <p>Sistema de Gestión de Laboratorios · INACAP<br>Control de equipos, reparaciones, inventario y reportes.</p>
+
+      <ul class="demo-list">
+        <li>Acceso por rol: Administrador, Técnico, Bodega, Coordinador, Jefe, Usuario.</li>
+        <li>Generación de códigos QR, historial de reparaciones e inventario con alertas.</li>
+        <li>Reportes exportables y vistas móviles por QR.</li>
+      </ul>
+
+      <div class="small">Proyecto integrado · 2025</div>
+    </div>
+
+    <!-- RIGHT: card de login -->
+    <div class="card" aria-labelledby="signinTitle">
+      <h2 id="signinTitle">Iniciar sesión</h2>
+      <div class="muted">Usa tus credenciales institucionales</div>
+
+      <form id="loginForm" onsubmit="event.preventDefault(); doLogin()">
+        <input id="email" type="email" placeholder="correo@inacap.cl" autocomplete="username" required>
+        <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+        <button class="btn" type="submit" id="submitBtn">Ingresar</button>
+      </form>
+
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn ghost" onclick="fillDemo()" type="button">Credenciales demo</button>
+      </div>
+
+      <div id="error" class="error" role="status" aria-live="polite"></div>
+      <div style="text-align:center;margin-top:14px">
+        <img src="inacap.jpg" alt="Inacap" style="width:110px;border-radius:10px;opacity:0.9">
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = 'http://localhost:8000/api';
+
+// Si ya hay sesión, redirigir directamente al dashboard
+window.addEventListener('load', () => {
+  const user = localStorage.getItem('sigelin_user');
+  const token = localStorage.getItem('sigelin_token');
+  
+  if(user && token) {
+    window.location.href = '/dashboard.html';
+  }
+});
+
+function fillDemo(){
+  document.getElementById('email').value = 'admin@sigelin.cl';
+  document.getElementById('password').value = '1234';
+}
+
+async function doLogin(){
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const elErr = document.getElementById('error');
+  const submitBtn = document.getElementById('submitBtn');
+  
+  elErr.classList.remove('show', 'success');
+  elErr.textContent = '';
+
+  if(!email || !password){ 
+    elErr.classList.add('show');
+    elErr.textContent = 'Complete ambos campos.'; 
+    return; 
+  }
+
+  try{
+    submitBtn.disabled = true;
+    elErr.classList.add('show');
+    elErr.classList.remove('success');
+    elErr.textContent = 'Verificando...';
+
+    const res = await fetch(`${API_BASE}/auth/login/`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ correo: email, password })
+    });
+
+    if(!res.ok){
+      const err = await res.json().catch(()=>({message:'Error en login'}));
+      throw new Error(err.message || 'Credenciales inválidas');
+    }
+
+    const data = await res.json();
+    
+    if(!data.success){
+      throw new Error(data.message || 'Error al iniciar sesión');
+    }
+
+    localStorage.setItem('sigelin_user', JSON.stringify(data.user));
+    localStorage.setItem('sigelin_token', 'session_active');
+
+    elErr.classList.add('success');
+    elErr.textContent = 'Ingreso correcto. Redirigiendo...';
+    
+    setTimeout(()=> window.location.href = '/dashboard.html', 800);
+    
+  }catch(e){
+    elErr.classList.add('show');
+    elErr.classList.remove('success');
+    elErr.textContent = e.message;
+  }finally{
+    submitBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

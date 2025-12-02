@@ -10,18 +10,42 @@ from io import BytesIO
 User = get_user_model()
 
 # ============================================================================
-# AUTENTICACIÓN
+# PÁGINAS HTML
 # ============================================================================
 
 def index(request):
-    """Renderiza la página de login"""
+    """Página de login"""
     return render(request, 'frontend/index.html')
 
 
 def dashboard(request):
-    """Renderiza el dashboard"""
+    """Dashboard principal"""
     return render(request, 'frontend/dashboard.html')
 
+
+def equipos(request):
+    """Página de gestión de equipos"""
+    return render(request, 'frontend/Equipos.html')
+
+
+def reparaciones(request):
+    """Página de gestión de reparaciones"""
+    return render(request, 'frontend/Reparaciones.html')
+
+
+def inventario(request):
+    """Página de inventario de repuestos"""
+    return render(request, 'frontend/Inventario.html')
+
+
+def reportes(request):
+    """Página de generación de reportes"""
+    return render(request, 'frontend/Reportes.html')
+
+
+# ============================================================================
+# AUTENTICACIÓN
+# ============================================================================
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -48,7 +72,7 @@ def login_view(request):
         
         if user:
             login(request, user)
-            print("✓ Login exitoso")
+            print("✅ Login exitoso")
             return JsonResponse({
                 'success': True,
                 'message': 'Login exitoso',

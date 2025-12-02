@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGELIN - Reportes</title>
+  <style>
+    body { font-family: 'Roboto', sans-serif; margin: 0; display: flex; background: #f5f5f5; }
+    aside { width: 220px; background: #D32F2F; color: white; padding: 20px; height: 100vh; }
+    aside a { color: white; text-decoration: none; display: block; margin: 10px 0; }
+    main { flex: 1; padding: 20px; }
+    button { background: #D32F2F; color: white; border: none; padding: 10px 20px; border-radius: 8px; margin: 10px; cursor: pointer; }
+  </style>
+<script>
+  // Verificar autenticación al cargar
+  window.addEventListener('DOMContentLoaded', async () => {
+    const isAuth = await auth.requireAuth();
+    if (!isAuth) return;
+    
+    const user = auth.getUser();
+    // ... código específico de cada página
+  });
+</script>python manage.py makemigrations
+</head>
+<body>
+  <aside>
+  <h2>SIGELIN</h2>
+  <a href="/dashboard.html">📊 Panel</a>
+  <a href="/equipos.html" class="active">🖥️ Equipos</a>
+  <a href="/reparaciones.html">🔧 Reparaciones</a>
+  <a href="/inventario.html">📦 Inventario</a>
+  <a href="/reportes.html">📄 Reportes</a>
+  <button onclick="logout()">Cerrar sesión</button>
+</aside>
+  <main>
+    <h1>Reportes del Sistema</h1>
+    <p>Seleccione tipo de reporte:</p>
+    <button onclick="generar('pdf')">Generar PDF</button>
+    <button onclick="generar('excel')">Generar Excel</button>
+    <div id="msg"></div>
+  </main>
+
+  <script>
+    const token = localStorage.getItem("sigelin_token");
+    if (!token) window.location.href = "/";
+
+    async function generar(tipo) {
+      const res = await fetch(`http://localhost:8000/api/reportes/?tipo=${tipo}`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `reporte.${tipo === "pdf" ? "pdf" : "xlsx"}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = "/";
+    }
+  </script>
+</body>
+<script src="/static/frontend/auth.js"></script>
+</html>

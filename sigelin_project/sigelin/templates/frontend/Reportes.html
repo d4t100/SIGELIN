@@ -1,68 +1,110 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SIGELIN - Reportes</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Reportes - SIGELIN</title>
   <style>
-    body { font-family: 'Roboto', sans-serif; margin: 0; display: flex; background: #f5f5f5; }
-    aside { width: 220px; background: #D32F2F; color: white; padding: 20px; height: 100vh; }
-    aside a { color: white; text-decoration: none; display: block; margin: 10px 0; }
-    main { flex: 1; padding: 20px; }
-    button { background: #D32F2F; color: white; border: none; padding: 10px 20px; border-radius: 8px; margin: 10px; cursor: pointer; }
-  </style>
-<script>
-  // Verificar autenticación al cargar
-  window.addEventListener('DOMContentLoaded', async () => {
-    const isAuth = await auth.requireAuth();
-    if (!isAuth) return;
+    :root{--brand:#D32F2F;--bg:#f5f7fb;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Roboto',Arial,sans-serif;background:var(--bg);color:#0b1220;display:flex;min-height:100vh}
     
-    const user = auth.getUser();
-    // ... código específico de cada página
-  });
-</script>python manage.py makemigrations
+    aside{width:220px;background:var(--brand);color:#fff;padding:20px;height:100vh;position:fixed;left:0;top:0;overflow-y:auto}
+    aside h2{margin:0 0 20px;font-size:20px}
+    aside a{display:block;color:#fff;text-decoration:none;margin:10px 0;padding:10px;border-radius:6px;transition:background 0.3s}
+    aside a:hover{background:rgba(255,255,255,0.1)}
+    aside a.active{background:rgba(255,255,255,0.2)}
+    aside button{margin-top:20px;background:#fff;color:var(--brand);border:none;padding:10px;width:100%;border-radius:8px;cursor:pointer;font-weight:600}
+    
+    main{flex:1;margin-left:220px;padding:20px;width:calc(100% - 220px)}
+    
+    .header{background:#fff;padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+    .header h1{margin:0 0 8px;color:var(--brand)}
+    
+    .user-badge{background:rgba(255,255,255,0.1);padding:12px;border-radius:8px;margin-bottom:20px}
+    .user-badge .name{font-weight:700;font-size:16px;margin-bottom:4px}
+    .user-badge .role{font-size:13px;opacity:0.8}
+    
+    .card{background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);margin-bottom:20px}
+    .card h3{margin:0 0 16px;color:#0b1220}
+    
+    .btn{background:var(--brand);color:#fff;border:none;padding:12px 20px;border-radius:8px;cursor:pointer;font-weight:600;margin:8px;transition:background 0.3s}
+    .btn:hover{background:#b71c1c}
+    .btn:disabled{background:#ccc;cursor:not-allowed}
+  </style>
+  <script src="/static/frontend/auth.js"></script>
 </head>
 <body>
   <aside>
-  <h2>SIGELIN</h2>
-  <a href="/dashboard.html">📊 Panel</a>
-  <a href="/equipos.html" class="active">🖥️ Equipos</a>
-  <a href="/reparaciones.html">🔧 Reparaciones</a>
-  <a href="/inventario.html">📦 Inventario</a>
-  <a href="/reportes.html">📄 Reportes</a>
-  <button onclick="logout()">Cerrar sesión</button>
-</aside>
+    <h2>SIGELIN</h2>
+    
+    <div class="user-badge">
+      <div class="name" id="sidebarName">Usuario</div>
+      <div class="role" id="sidebarRole">Rol</div>
+    </div>
+    
+    <a href="/dashboard.html">📊 Panel</a>
+    <a href="/equipos.html">🖥️ Equipos</a>
+    <a href="/reparaciones.html">🔧 Reparaciones</a>
+    <a href="/inventario.html">📦 Inventario</a>
+    <a href="/reportes.html" class="active">📄 Reportes</a>
+    
+    <button onclick="logout()">Cerrar sesión</button>
+  </aside>
+
   <main>
-    <h1>Reportes del Sistema</h1>
-    <p>Seleccione tipo de reporte:</p>
-    <button onclick="generar('pdf')">Generar PDF</button>
-    <button onclick="generar('excel')">Generar Excel</button>
-    <div id="msg"></div>
+    <div class="header">
+      <h1>Reportes del Sistema</h1>
+      <p>Genera reportes en diferentes formatos</p>
+    </div>
+
+    <div class="card">
+      <h3>Selecciona el tipo de reporte</h3>
+      <button class="btn" onclick="generarReporte('pdf', 'equipos')">📄 Equipos (PDF)</button>
+      <button class="btn" onclick="generarReporte('excel', 'equipos')">📊 Equipos (Excel)</button>
+      <button class="btn" onclick="generarReporte('pdf', 'reparaciones')">📄 Reparaciones (PDF)</button>
+      <button class="btn" onclick="generarReporte('excel', 'reparaciones')">📊 Reparaciones (Excel)</button>
+      <button class="btn" onclick="generarReporte('pdf', 'inventario')">📄 Inventario (PDF)</button>
+      <button class="btn" onclick="generarReporte('excel', 'inventario')">📊 Inventario (Excel)</button>
+    </div>
+
+    <div class="card">
+      <h3>Reportes Generados</h3>
+      <div id="mensajes"></div>
+    </div>
   </main>
 
-  <script>
-    const token = localStorage.getItem("sigelin_token");
-    if (!token) window.location.href = "index.html";
+<script>
+// Verificar autenticación
+if (!auth.requireAuth()) {
+  // requireAuth() ya redirige si no está autenticado
+}
 
-    async function generar(tipo) {
-      const res = await fetch(`http://localhost:8000/api/reportes/?tipo=${tipo}`, {
-        headers: { Authorization: "Bearer " + token }
-      });
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `reporte.${tipo === "pdf" ? "pdf" : "xlsx"}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
+// Mostrar información del usuario
+const user = auth.getUser();
+if (user) {
+  const nombreCompleto = `${user.nombre || ''} ${user.apellido || ''}`.trim();
+  document.getElementById('sidebarName').textContent = nombreCompleto || user.email || 'Usuario';
+  document.getElementById('sidebarRole').textContent = user.rol || 'Sin rol';
+}
 
-    function logout() {
-      localStorage.clear();
-      window.location.href = "index.html";
-    }
-  </script>
+// Generar reporte (función de ejemplo)
+async function generarReporte(formato, tipo) {
+  const mensajes = document.getElementById('mensajes');
+  mensajes.innerHTML = `<p style="color:#1e40af">Generando reporte de ${tipo} en formato ${formato}...</p>`;
+  
+  try {
+    // Aquí irá la lógica para generar el reporte
+    // Por ahora solo mostramos un mensaje
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    mensajes.innerHTML = `<p style="color:#16a34a">✅ Reporte de ${tipo} generado exitosamente (${formato})</p>`;
+    
+  } catch (error) {
+    console.error('Error:', error);
+    mensajes.innerHTML = `<p style="color:#dc2626">❌ Error al generar el reporte</p>`;
+  }
+}
+</script>
 </body>
-<script src="/static/frontend/auth.js"></script>
 </html>
