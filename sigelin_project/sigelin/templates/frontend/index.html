@@ -88,14 +88,12 @@
 <script>
 const API_BASE = 'http://localhost:8000/api';
 
-window.addEventListener('load', () => {
-  const user = localStorage.getItem('sigelin_user');
-  const token = localStorage.getItem('sigelin_token');
-  
-  if(user && token) {
-    window.location.href = '/dashboard.html';
+(function() {
+  if(localStorage.getItem('sigelin_authenticated') === 'true') {
+    console.log('✅ Sesión activa, redirigiendo al dashboard...');
+    window.location.replace('/dashboard.html');
   }
-});
+})();
 
 function fillDemo(){
   document.getElementById('email').value = 'carlos.rodriguez@inacap.cl';
@@ -153,6 +151,60 @@ async function doLogin(){
     elErr.classList.add('show');
     elErr.classList.remove('success');
     elErr.textContent = e.message;
+  }finally{
+    submitBtn.disabled = false;
+  }
+}
+async function doLogin(){
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const elErr = document.getElementById('error');
+  const submitBtn = document.getElementById('submitBtn');
+  
+  elErr.classList.remove('show', 'success');
+  elErr.textContent = '';
+
+  if(!email || !password){ 
+    elErr.classList.add('show');
+    elErr.textContent = 'Complete ambos campos.'; 
+    return; 
+  }
+
+  try{
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Verificando...';
+
+    const res = await fetch(`${API_BASE}/auth/login/`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({ correo: email, password })
+    });
+
+    const data = await res.json();
+    
+    if(!data.success){
+      throw new Error(data.message || 'Error al iniciar sesión');
+    }
+
+    // Guardar datos de usuario
+    localStorage.setItem('sigelin_user', JSON.stringify(data.user));
+    localStorage.setItem('sigelin_authenticated', 'true');
+    localStorage.setItem('sigelin_token', 'session_active');
+
+    elErr.classList.add('show', 'success');
+    elErr.textContent = '✓ Ingreso correcto. Redirigiendo...';
+    
+    // Redirigir al dashboard
+    setTimeout(() => {
+      window.location.href = '/dashboard.html';
+    }, 500);
+    
+  }catch(e){
+    elErr.classList.add('show');
+    elErr.classList.remove('success');
+    elErr.textContent = e.message;
+    submitBtn.textContent = 'Ingresar';
   }finally{
     submitBtn.disabled = false;
   }

@@ -142,17 +142,19 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # Session Configuration
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SECURE = False
-SESSION_COOKIE_AGE = 86400
-SESSION_SAVE_EVERY_REQUEST = True
-SESSION_COOKIE_NAME = 'sigelin_sessionid'
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_NAME = 'sigelin_sessionid'
+SESSION_COOKIE_AGE = 86400  # 24 horas
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = False  # IMPORTANTE: Permitir acceso desde JavaScript
+SESSION_COOKIE_SAMESITE = None  # Permitir cookies en todas las requests
+SESSION_COOKIE_SECURE = False  # False para desarrollo (HTTP)
+SESSION_COOKIE_PATH = '/'
+SESSION_COOKIE_DOMAIN = None
 
 # CSRF Configuration
 CSRF_COOKIE_HTTPONLY = False
-CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = None
 CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_NAME = 'sigelin_csrftoken'
 CSRF_TRUSTED_ORIGINS = [

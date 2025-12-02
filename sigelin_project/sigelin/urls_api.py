@@ -16,4 +16,5 @@ urlpatterns = [
     path('equipos/', views.listar_equipos, name='api_equipos'),
     path('reparaciones/', views.listar_reparaciones, name='api_reparaciones'),
     path('repuestos/', views.listar_repuestos, name='api_repuestos'),
+    path('inventario/', views.listar_repuestos, name='api_inventario'),
 ]

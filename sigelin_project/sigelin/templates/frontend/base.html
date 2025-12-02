@@ -26,17 +26,13 @@
     footer{padding:18px;text-align:center;color:var(--muted);font-size:13px;background:#f8fafc}
     @media(max-width:900px){nav{display:none}}
   </style>
-<script>
-  // Verificar autenticación al cargar
-  window.addEventListener('DOMContentLoaded', async () => {
-    const isAuth = await auth.requireAuth();
-    if (!isAuth) return;
-    
-    const user = auth.getUser();
-    // ... código específico de cada página
-  });
-</script>
 </head>
+<script>
+// Verificación simple de autenticación
+if (!localStorage.getItem('sigelin_authenticated')) {
+    window.location.href = '/';
+}
+</script>
 <body>
   <header>
     <div class="brand">

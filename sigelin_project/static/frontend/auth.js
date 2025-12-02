@@ -1,5 +1,5 @@
 /**
- * Sistema de autenticación SIGELIN - Versión Simplificada
+ * Sistema de autenticación SIGELIN - Versión Corregida
  */
 
 const API_BASE = 'http://localhost:8000/api';
@@ -59,6 +59,7 @@ class AuthManager {
     saveUserToStorage(user) {
         localStorage.setItem('sigelin_user', JSON.stringify(user));
         localStorage.setItem('sigelin_authenticated', 'true');
+        localStorage.setItem('sigelin_token', 'session_active');
     }
 
     // Obtener usuario desde localStorage
@@ -76,6 +77,7 @@ class AuthManager {
         this.user = null;
         localStorage.removeItem('sigelin_user');
         localStorage.removeItem('sigelin_authenticated');
+        localStorage.removeItem('sigelin_token');
     }
 
     // Obtener usuario actual
@@ -85,16 +87,28 @@ class AuthManager {
 
     // Verificar si está autenticado (solo revisa localStorage)
     isAuthenticated() {
-        return localStorage.getItem('sigelin_authenticated') === 'true' && this.getUserFromStorage() !== null;
+        const isAuth = localStorage.getItem('sigelin_authenticated') === 'true';
+        const hasUser = this.getUserFromStorage() !== null;
+        return isAuth && hasUser;
     }
 
-    // Proteger página - SOLO revisa localStorage, NO hace llamadas al servidor
+    // Proteger página - SOLO revisa localStorage, NO redirige automáticamente
     requireAuth() {
+        const currentPath = window.location.pathname;
+        
+        // Si estamos en la página de login, no hacer nada
+        if (currentPath === '/' || currentPath === '/index.html') {
+            return false;
+        }
+        
+        // Verificar autenticación
         if (!this.isAuthenticated()) {
-            console.log('No autenticado, redirigiendo al login...');
+            console.log('❌ No autenticado, redirigiendo al login...');
             window.location.href = '/';
             return false;
         }
+        
+        console.log('✅ Usuario autenticado');
         return true;
     }
 }
@@ -134,7 +148,9 @@ async function apiFetch(endpoint, options = {}) {
 
 // Función de logout global
 function logout() {
-    auth.logout();
+    if (confirm('¿Seguro que deseas cerrar sesión?')) {
+        auth.logout();
+    }
 }
 
 // Marcar enlace activo
@@ -158,9 +174,5 @@ window.apiFetch = apiFetch;
 window.logout = logout;
 window.API_BASE = API_BASE;
 
-// Ejecutar al cargar
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', markActiveLink);
-} else {
-    markActiveLink();
-}
+// NO ejecutar requireAuth automáticamente
+console.log('🔐 Sistema de autenticación cargado');

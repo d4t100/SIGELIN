@@ -105,13 +105,17 @@
     </div>
   </main>
 <script>
-// Verificar autenticación
-const user = JSON.parse(localStorage.getItem('sigelin_user') || 'null');
-const token = localStorage.getItem('sigelin_token');
-
-if(!user || !token){
-  console.log('No hay sesión, redirigiendo a login...');
+// Verificar autenticación SOLO si no hay sesión
+if(!localStorage.getItem('sigelin_authenticated')){
   window.location.href = '/';
+  throw new Error('No autenticado'); // Detener ejecución
+}
+
+// Obtener datos del usuario
+const user = JSON.parse(localStorage.getItem('sigelin_user') || 'null');
+if(!user) {
+  window.location.href = '/';
+  throw new Error('Usuario no encontrado');
 }
 
 // Mostrar información del usuario

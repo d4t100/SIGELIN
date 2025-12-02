@@ -15,14 +15,10 @@
     .alerta { color: red; font-weight: bold; }
   </style>
 <script>
-  // Verificar autenticación al cargar
-  window.addEventListener('DOMContentLoaded', async () => {
-    const isAuth = await auth.requireAuth();
-    if (!isAuth) return;
-    
-    const user = auth.getUser();
-    // ... código específico de cada página
-});
+// Verificación simple de autenticación
+if (!localStorage.getItem('sigelin_authenticated')) {
+    window.location.href = '/';
+}
 </script>
 </head>
 <body>

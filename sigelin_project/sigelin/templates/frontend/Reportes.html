@@ -34,6 +34,12 @@
   </style>
   <script src="/static/frontend/auth.js"></script>
 </head>
+<script>
+// Verificación simple de autenticación
+if (!localStorage.getItem('sigelin_authenticated')) {
+    window.location.href = '/';
+}
+</script>
 <body>
   <aside>
     <h2>SIGELIN</h2>
